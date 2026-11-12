@@ -1,229 +1,500 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
-function App() {
+const statusLabels = {
+  searching: "กำลังตามหา",
+  found: "พบของแล้ว",
+  returned: "ส่งคืนเจ้าของแล้ว",
+};
+
+function makeToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export default function App() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [type, setType] = useState("lost");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [images, setImages] = useState([]);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [createdSecret, setCreatedSecret] = useState(null);
+  const [openContactId, setOpenContactId] = useState(null);
+  const [contactName, setContactName] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+
+  const [manageId, setManageId] = useState("");
+  const [manageToken, setManageToken] = useState("");
+  const [manageStatus, setManageStatus] = useState("searching");
+  const [messages, setMessages] = useState([]);
+  const [manageLoaded, setManageLoaded] = useState(false);
+
+  async function fetchItems() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("items")
+      .select("id,type,title,description,location,image_urls,status,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      alert("โหลดประกาศไม่สำเร็จ: " + error.message);
+    } else {
+      setItems(data || []);
+    }
+
+    setLoading(false);
+  }
 
   useEffect(() => {
     fetchItems();
   }, []);
 
-  async function fetchItems() {
-    const { data, error } = await supabase
-      .from("items")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const keyword = search.trim().toLowerCase();
 
-    if (error) {
-      alert("โหลดข้อมูลไม่สำเร็จ: " + error.message);
+      const matchesSearch =
+        !keyword ||
+        [item.title, item.description, item.location]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(keyword));
+
+      const matchesType =
+        typeFilter === "all" || item.type === typeFilter;
+
+      const matchesStatus =
+        statusFilter === "all" || item.status === statusFilter;
+
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [items, search, typeFilter, statusFilter]);
+
+  function handleImageChange(event) {
+    const selected = Array.from(event.target.files || []);
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+
+    if (images.length + selected.length > 5) {
+      alert("แนบรูปภาพได้สูงสุด 5 รูป");
+      event.target.value = "";
       return;
     }
 
-    setItems(data || []);
-  }
-
-  function handleImageChange(e) {
-    const selected = Array.from(e.target.files || []);
-    const remaining = 5 - images.length;
-    const accepted = [];
-
     for (const file of selected) {
-      if (accepted.length >= remaining) break;
-
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      if (!allowed.includes(file.type)) {
         alert("รองรับเฉพาะ JPG, PNG และ WEBP");
-        continue;
+        event.target.value = "";
+        return;
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        alert("รูปแต่ละรูปต้องมีขนาดไม่เกิน 5 MB");
-        continue;
+        alert("รูปภาพแต่ละไฟล์ต้องมีขนาดไม่เกิน 5 MB");
+        event.target.value = "";
+        return;
       }
-
-      accepted.push(file);
     }
 
-    setImages((prev) => [...prev, ...accepted]);
-    e.target.value = "";
+    setImages((previous) => [...previous, ...selected]);
+    event.target.value = "";
   }
 
   function removeImage(index) {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImages((previous) => previous.filter((_, i) => i !== index));
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function handleSubmit(event) {
+    event.preventDefault();
 
     if (!title.trim()) {
       alert("กรุณากรอกชื่อสิ่งของ");
       return;
     }
 
-    setLoading(true);
-    const imageUrls = [];
+    setSaving(true);
 
     try {
+      const imageUrls = [];
+
       for (const file of images) {
-        const extension = file.name.split(".").pop().toLowerCase();
-        const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
+        const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const path = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("lost-found")
-          .upload(fileName, file, { contentType: file.type });
+          .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
 
         if (uploadError) throw uploadError;
 
         const { data } = supabase.storage
           .from("lost-found")
-          .getPublicUrl(fileName);
+          .getPublicUrl(path);
 
         imageUrls.push(data.publicUrl);
       }
 
-      const { error } = await supabase.from("items").insert({
-        type,
-        title: title.trim(),
-        description,
-        location,
-        image_urls: imageUrls,
-      });
+      const token = makeToken();
+
+      const { data: newId, error } = await supabase.rpc(
+        "create_public_item",
+        {
+          p_type: type,
+          p_title: title.trim(),
+          p_description: description.trim(),
+          p_location: location.trim(),
+          p_image_urls: imageUrls,
+          p_manage_token: token,
+        }
+      );
 
       if (error) throw error;
 
-      alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
-
+      setCreatedSecret({ id: newId, token });
       setTitle("");
       setDescription("");
       setLocation("");
       setImages([]);
+      setType("lost");
 
       await fetchItems();
     } catch (error) {
-      alert("เกิดข้อผิดพลาด: " + error.message);
+      alert("ลงประกาศไม่สำเร็จ: " + error.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
+    }
+  }
+
+  async function sendMessage(itemId) {
+    if (!contactMessage.trim()) {
+      alert("กรุณาพิมพ์ข้อความ");
+      return;
+    }
+
+    const { error } = await supabase.rpc("send_contact_message", {
+      p_item_id: itemId,
+      p_sender_name: contactName.trim(),
+      p_message: contactMessage.trim(),
+    });
+
+    if (error) {
+      alert("ส่งข้อความไม่สำเร็จ: " + error.message);
+      return;
+    }
+
+    alert("ส่งข้อความเรียบร้อยแล้ว");
+    setContactName("");
+    setContactMessage("");
+    setOpenContactId(null);
+  }
+
+  async function loadManageMessages(event) {
+    event.preventDefault();
+
+    if (!manageId.trim() || !manageToken.trim()) {
+      alert("กรุณากรอกรหัสประกาศและรหัสจัดการ");
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("get_contact_messages", {
+      p_item_id: Number(manageId),
+      p_manage_token: manageToken.trim(),
+    });
+
+    if (error) {
+      alert("เปิดข้อมูลไม่สำเร็จ ตรวจสอบรหัสอีกครั้ง");
+      setManageLoaded(false);
+      return;
+    }
+
+    const item = items.find((entry) => entry.id === Number(manageId));
+    setManageStatus(item?.status || "searching");
+    setMessages(data || []);
+    setManageLoaded(true);
+  }
+
+  async function changeStatus(event) {
+    event.preventDefault();
+
+    const { error } = await supabase.rpc("update_item_status", {
+      p_item_id: Number(manageId),
+      p_manage_token: manageToken.trim(),
+      p_status: manageStatus,
+    });
+
+    if (error) {
+      alert("เปลี่ยนสถานะไม่สำเร็จ: " + error.message);
+      return;
+    }
+
+    alert("เปลี่ยนสถานะเรียบร้อยแล้ว");
+    await fetchItems();
+  }
+
+  async function copyToken() {
+    if (!createdSecret) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        `รหัสประกาศ: ${createdSecret.id}\nรหัสจัดการ: ${createdSecret.token}`
+      );
+      alert("คัดลอกรหัสแล้ว กรุณาเก็บไว้ให้ดี");
+    } catch {
+      alert("ไม่สามารถคัดลอกได้ กรุณาจดรหัสเก็บไว้");
     }
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>School Lost & Found</h1>
-        <p>ระบบแจ้งของหายและประกาศของที่พบ</p>
+    <main className="app">
+      <header className="site-header">
+        <h1>School Lost &amp; Found</h1>
+        <p>ระบบแจ้งของหายและของที่พบภายในโรงเรียน</p>
       </header>
 
-      <main className="container">
-        <section className="form-section">
-          <h2>แจ้งของหาย / แจ้งพบของ</h2>
+      <section className="form-section">
+        <h2>ลงประกาศใหม่</h2>
 
-          <form onSubmit={handleSubmit}>
-            <label>ประเภท</label>
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="lost">แจ้งของหาย</option>
-              <option value="found">แจ้งพบของ</option>
-            </select>
+        <form onSubmit={handleSubmit}>
+          <label>ประเภทประกาศ</label>
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="lost">แจ้งของหาย</option>
+            <option value="found">แจ้งพบของ</option>
+          </select>
 
-            <label>ชื่อสิ่งของ</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="เช่น กระเป๋าสีดำ"
-              maxLength={100}
-              required
-            />
+          <label>ชื่อสิ่งของ</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="เช่น กระเป๋าสตางค์ กล่องดินสอ"
+            maxLength={100}
+            required
+          />
 
-            <label>รายละเอียด</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="รายละเอียดของสิ่งของ"
-            />
+          <label>รายละเอียด</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="รายละเอียดหรือลักษณะของสิ่งของ"
+            rows={3}
+          />
 
-            <label>สถานที่</label>
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="เช่น อาคารเรียน"
-            />
+          <label>สถานที่ที่หายหรือพบ</label>
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="เช่น อาคาร 2 ห้องสมุด"
+          />
 
-            <label>รูปภาพ (สูงสุด 5 รูป)</label>
-            <div className="upload-box">
-              <input
-                id="images"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={handleImageChange}
-                disabled={images.length >= 5}
-              />
-              <label htmlFor="images" className="upload-button">
-                เลือกรูปภาพ
-              </label>
-              <p>{images.length}/5 รูป</p>
-              <small>JPG, PNG, WEBP ไม่เกิน 5 MB ต่อรูป</small>
-            </div>
+          <label>รูปภาพ (สูงสุด 5 รูป)</label>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            onChange={handleImageChange}
+          />
 
-            <div className="preview-grid">
+          {images.length > 0 && (
+            <div className="selected-files">
               {images.map((file, index) => (
-                <div className="preview-item" key={`${file.name}-${index}`}>
-                  <img src={URL.createObjectURL(file)} alt="ตัวอย่างรูป" />
-                  <button
-                    type="button"
-                    className="remove-button"
-                    onClick={() => removeImage(index)}
-                  >
-                    ×
+                <div className="selected-file" key={`${file.name}-${index}`}>
+                  <span>{file.name}</span>
+                  <button type="button" onClick={() => removeImage(index)}>
+                    ลบ
                   </button>
                 </div>
               ))}
             </div>
+          )}
 
-            <button className="submit-button" disabled={loading}>
-              {loading ? "กำลังบันทึก..." : "ส่งข้อมูล"}
-            </button>
-          </form>
+          <p className="hint">ห้ามใส่ข้อมูลส่วนตัวหรือภาพบัตรนักเรียนในประกาศ</p>
+
+          <button className="primary-button" disabled={saving}>
+            {saving ? "กำลังลงประกาศ..." : "ลงประกาศ"}
+          </button>
+        </form>
+      </section>
+
+      {createdSecret && (
+        <section className="secret-box">
+          <h2>ประกาศสำเร็จ!</h2>
+          <p>เก็บรหัสทั้งสองรายการนี้ไว้ เพื่อเปลี่ยนสถานะและอ่านข้อความในภายหลัง</p>
+          <p><strong>รหัสประกาศ:</strong> {createdSecret.id}</p>
+          <p className="token-text">
+            <strong>รหัสจัดการ:</strong> {createdSecret.token}
+          </p>
+          <button type="button" onClick={copyToken}>คัดลอกรหัสเก็บไว้</button>
+          <button type="button" onClick={() => setCreatedSecret(null)}>
+            ปิด
+          </button>
         </section>
+      )}
 
-        <section className="latest">
-          <h2>รายการล่าสุด</h2>
+      <section className="manage-section">
+        <h2>จัดการประกาศและอ่านข้อความ</h2>
+        <p>กรอกรหัสประกาศและรหัสจัดการที่ได้รับตอนลงประกาศ</p>
 
+        <form onSubmit={loadManageMessages}>
+          <label>รหัสประกาศ</label>
+          <input
+            value={manageId}
+            onChange={(e) => setManageId(e.target.value)}
+            placeholder="เช่น 12"
+          />
+
+          <label>รหัสจัดการ</label>
+          <input
+            value={manageToken}
+            onChange={(e) => setManageToken(e.target.value)}
+            placeholder="วางรหัสจัดการของคุณ"
+          />
+
+          <button type="submit">เปิดข้อมูลประกาศ</button>
+        </form>
+
+        {manageLoaded && (
+          <div className="manage-result">
+            <form onSubmit={changeStatus}>
+              <label>เปลี่ยนสถานะ</label>
+              <select
+                value={manageStatus}
+                onChange={(e) => setManageStatus(e.target.value)}
+              >
+                <option value="searching">กำลังตามหา</option>
+                <option value="found">พบของแล้ว</option>
+                <option value="returned">ส่งคืนเจ้าของแล้ว</option>
+              </select>
+              <button type="submit">บันทึกสถานะ</button>
+            </form>
+
+            <h3>ข้อความที่ได้รับ</h3>
+            {messages.length === 0 ? (
+              <p>ยังไม่มีข้อความ</p>
+            ) : (
+              messages.map((message) => (
+                <article className="message-card" key={message.id}>
+                  <strong>{message.sender_name || "ผู้ไม่ระบุชื่อ"}</strong>
+                  <p>{message.message}</p>
+                  <small>{new Date(message.created_at).toLocaleString("th-TH")}</small>
+                </article>
+              ))
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="items-section">
+        <h2>รายการประกาศ</h2>
+
+        <input
+          className="search-input"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="ค้นหาชื่อสิ่งของ รายละเอียด หรือสถานที่..."
+        />
+
+        <div className="filters">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="all">ประกาศทุกประเภท</option>
+            <option value="lost">ของหาย</option>
+            <option value="found">พบของ</option>
+          </select>
+
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">ทุกสถานะ</option>
+            <option value="searching">กำลังตามหา</option>
+            <option value="found">พบของแล้ว</option>
+            <option value="returned">ส่งคืนเจ้าของแล้ว</option>
+          </select>
+        </div>
+
+        {loading ? (
+          <p>กำลังโหลดประกาศ...</p>
+        ) : filteredItems.length === 0 ? (
+          <p>ไม่พบประกาศที่ค้นหา</p>
+        ) : (
           <div className="item-grid">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <article className="item-card" key={item.id}>
-                <span className={item.type === "lost" ? "lost-tag" : "found-tag"}>
-                  {item.type === "lost" ? "ของหาย" : "พบของ"}
-                </span>
-
-                <h3>{item.title}</h3>
-
-                <div className="item-images">
-                  {(item.image_urls || []).map((url, index) => (
-                    <img key={index} src={url} alt={item.title} />
-                  ))}
+                <div className="item-tags">
+                  <span className={item.type === "lost" ? "lost-tag" : "found-tag"}>
+                    {item.type === "lost" ? "ของหาย" : "พบของ"}
+                  </span>
+                  <span className="status-tag">
+                    {statusLabels[item.status] || item.status}
+                  </span>
                 </div>
 
-                <p>{item.description}</p>
-                <p>สถานที่: {item.location || "-"}</p>
-                <small>
-                  {new Date(item.created_at).toLocaleString("th-TH")}
-                </small>
+                <h3>{item.title}</h3>
+                <p>{item.description || "ไม่มีรายละเอียด"}</p>
+                <p><strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}</p>
+                <small>วันที่ลงประกาศ: {new Date(item.created_at).toLocaleString("th-TH")}</small>
+
+                {item.image_urls?.length > 0 && (
+                  <div className="item-images">
+                    {item.image_urls.map((url, index) => (
+                      <a href={url} target="_blank" rel="noreferrer" key={index}>
+                        <img src={url} alt={`รูปประกาศ ${index + 1}`} />
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenContactId(openContactId === item.id ? null : item.id);
+                    setContactName("");
+                    setContactMessage("");
+                  }}
+                >
+                  ติดต่อผ่านเว็บไซต์
+                </button>
+
+                {openContactId === item.id && (
+                  <div className="contact-form">
+                    <label>ชื่อผู้ส่ง (ไม่บังคับ)</label>
+                    <input
+                      value={contactName}
+                      onChange={(e) => setContactName(e.target.value)}
+                      placeholder="ระบุชื่อหรือเว้นว่างได้"
+                    />
+
+                    <label>ข้อความ</label>
+                    <textarea
+                      value={contactMessage}
+                      onChange={(e) => setContactMessage(e.target.value)}
+                      placeholder="พิมพ์ข้อความถึงผู้แจ้งประกาศ"
+                      rows={3}
+                      maxLength={1000}
+                    />
+
+                    <button type="button" onClick={() => sendMessage(item.id)}>
+                      ส่งข้อความ
+                    </button>
+                  </div>
+                )}
               </article>
             ))}
           </div>
+        )}
+      </section>
 
-          {items.length === 0 && <p>ยังไม่มีรายการ</p>}
-        </section>
-      </main>
-    </div>
+      <footer className="site-footer">
+        School Lost &amp; Found
+      </footer>
+    </main>
   );
 }
-
-export default App;
