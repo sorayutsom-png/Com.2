@@ -66,7 +66,7 @@ function makeToken() {
   const characters =
     "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
 
   return Array.from(
