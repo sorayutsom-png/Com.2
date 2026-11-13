@@ -23,3 +23,48 @@ textarea,
 select {
   font: inherit;
 }
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 12px;
+  margin: 15px 0;
+}
+
+.category-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 95px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: white;
+  color: #222;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.category-button:hover {
+  border-color: #8439c7;
+  transform: translateY(-2px);
+}
+
+.category-button.active {
+  background: #ead9ff;
+  border: 2px solid #8439c7;
+  color: #60239b;
+  font-weight: bold;
+}
+
+.category-button span {
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .category-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
