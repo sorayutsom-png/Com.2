@@ -26,6 +26,10 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
+// ------------------------------
+// ค่าพื้นฐานของเว็บไซต์
+// ------------------------------
+
 const statusLabels = {
   searching: "กำลังตามหา",
   found: "พบของแล้ว",
@@ -54,11 +58,15 @@ const iconStyle = {
 const CONTACT_STORAGE = "school_lost_found_contact_chats";
 const OWNER_STORAGE = "school_lost_found_owner_items";
 
+// ------------------------------
+// ฟังก์ชันช่วยเหลือ
+// ------------------------------
+
 function makeToken() {
   const characters =
     "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
-  const bytes = new Uint8Array(8);
+  const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
 
   return Array.from(
@@ -69,7 +77,8 @@ function makeToken() {
 
 function readStorage(key) {
   try {
-    return JSON.parse(localStorage.getItem(key) || "[]");
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
   } catch {
     return [];
   }
@@ -78,16 +87,43 @@ function readStorage(key) {
 function saveStorage(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
     alert("บันทึกข้อมูลในเบราว์เซอร์ไม่สำเร็จ");
+    return false;
   }
 }
 
+function getErrorMessage(error) {
+  return error?.message || "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+}
+
+function formatDate(date) {
+  if (!date) return "-";
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return parsed.toLocaleString("th-TH");
+}
+
+function getRpcObject(data) {
+  if (Array.isArray(data)) return data[0] || {};
+  return data || {};
+}
+
+// ------------------------------
+// App
+// ------------------------------
+
 export default function App() {
+  // รายการประกาศ
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // แบบฟอร์มประกาศ
   const [type, setType] = useState("lost");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -95,16 +131,21 @@ export default function App() {
   const [images, setImages] = useState([]);
   const [category, setCategory] = useState("other");
 
+  // ตัวกรอง
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
+  // ข้อมูลหลังลงประกาศ
   const [createdSecret, setCreatedSecret] = useState(null);
+
+  // แบบฟอร์มติดต่อ
   const [openContactId, setOpenContactId] = useState(null);
   const [contactName, setContactName] = useState("");
   const [contactMessage, setContactMessage] = useState("");
 
+  // จัดการประกาศ
   const [manageId, setManageId] = useState("");
   const [manageToken, setManageToken] = useState("");
   const [manageStatus, setManageStatus] = useState("searching");
@@ -126,53 +167,73 @@ export default function App() {
   const [ownerReply, setOwnerReply] = useState("");
   const [ownerChatLoading, setOwnerChatLoading] = useState(false);
 
-  // รายการแชตที่บันทึกไว้ในเครื่อง
+  // ข้อมูลที่บันทึกในเครื่อง
   const [savedContactChats, setSavedContactChats] = useState([]);
   const [savedOwnerItems, setSavedOwnerItems] = useState([]);
+
+  // หน้ากล่องข้อความ
   const [chatView, setChatView] = useState(false);
   const [chatTab, setChatTab] = useState("contact");
+
+  // ------------------------------
+  // โหลดประกาศ
+  // ------------------------------
 
   async function fetchItems() {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("items")
-      .select(
-        "id,type,title,description,location,image_urls,status,category,created_at"
-      )
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("items")
+        .select(
+          "id,type,title,description,location,image_urls,status,category,created_at"
+        )
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      alert("โหลดประกาศไม่สำเร็จ: " + error.message);
-    } else {
+      if (error) throw error;
+
       setItems(data || []);
+    } catch (error) {
+      alert("โหลดประกาศไม่สำเร็จ: " + getErrorMessage(error));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
+
+  // ------------------------------
+  // โหลดแชตผู้ติดต่อ
+  // ------------------------------
 
   async function loadContactChat(roomId, token) {
+    if (!roomId || !token) return;
+
     setContactChatLoading(true);
 
-    const { data, error } = await supabase.rpc(
-      "get_private_chat_messages",
-      {
-        p_room_id: roomId,
-        p_contact_token: token,
-      }
-    );
+    try {
+      const { data, error } = await supabase.rpc(
+        "get_private_chat_messages",
+        {
+          p_room_id: roomId,
+          p_contact_token: token,
+        }
+      );
 
-    if (error) {
-      alert("เปิดห้องแชตไม่สำเร็จ ลิงก์อาจไม่ถูกต้อง");
-      setContactChatMessages([]);
-    } else {
-      setContactChatMessages(data || []);
+      if (error) throw error;
+
       setContactRoomId(String(roomId));
       setContactToken(token);
+      setContactChatMessages(data || []);
+    } catch (error) {
+      alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
+      setContactChatMessages([]);
+    } finally {
+      setContactChatLoading(false);
     }
-
-    setContactChatLoading(false);
   }
+
+  // ------------------------------
+  // เริ่มต้นเว็บไซต์
+  // ------------------------------
 
   useEffect(() => {
     fetchItems();
@@ -192,6 +253,10 @@ export default function App() {
     }
   }, []);
 
+  // ------------------------------
+  // ค้นหาและกรองประกาศ
+  // ------------------------------
+
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const keyword = search.trim().toLowerCase();
@@ -200,7 +265,9 @@ export default function App() {
         !keyword ||
         [item.title, item.description, item.location]
           .filter(Boolean)
-          .some((value) => value.toLowerCase().includes(keyword));
+          .some((value) =>
+            String(value).toLowerCase().includes(keyword)
+          );
 
       const matchesType =
         typeFilter === "all" || item.type === typeFilter;
@@ -212,11 +279,15 @@ export default function App() {
         categoryFilter === "all" ||
         (item.category || "other") === categoryFilter;
 
+      // ซ่อนประกาศที่ส่งคืนเจ้าของแล้วเสมอ
+      const notReturned = item.status !== "returned";
+
       return (
         matchesSearch &&
         matchesType &&
         matchesStatus &&
-        matchesCategory
+        matchesCategory &&
+        notReturned
       );
     });
   }, [
@@ -227,9 +298,17 @@ export default function App() {
     categoryFilter,
   ]);
 
+  // ------------------------------
+  // จัดการรูปภาพ
+  // ------------------------------
+
   function handleImageChange(event) {
     const selected = Array.from(event.target.files || []);
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
 
     if (images.length + selected.length > 5) {
       alert("แนบรูปภาพได้สูงสุด 5 รูป");
@@ -261,8 +340,14 @@ export default function App() {
     );
   }
 
+  // ------------------------------
+  // ลงประกาศ
+  // ------------------------------
+
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (saving) return;
 
     if (!title.trim()) {
       alert("กรุณากรอกชื่อสิ่งของ");
@@ -299,7 +384,7 @@ export default function App() {
 
       const token = makeToken();
 
-      const { data: newId, error } = await supabase.rpc(
+      const { data, error } = await supabase.rpc(
         "create_public_item",
         {
           p_type: type,
@@ -314,9 +399,17 @@ export default function App() {
 
       if (error) throw error;
 
-      setCreatedSecret({ id: newId, token });
+      const newId = Array.isArray(data) ? data[0] : data;
 
-      // บันทึกข้อมูลเจ้าของประกาศไว้ในเครื่องนี้
+      if (newId === null || newId === undefined) {
+        throw new Error("ไม่พบรหัสประกาศที่สร้างขึ้น");
+      }
+
+      setCreatedSecret({
+        id: newId,
+        token,
+      });
+
       const ownerEntry = {
         item_id: String(newId),
         token,
@@ -342,11 +435,15 @@ export default function App() {
 
       await fetchItems();
     } catch (error) {
-      alert("ลงประกาศไม่สำเร็จ: " + error.message);
+      alert("ลงประกาศไม่สำเร็จ: " + getErrorMessage(error));
     } finally {
       setSaving(false);
     }
   }
+
+  // ------------------------------
+  // บันทึกห้องแชตผู้ติดต่อ
+  // ------------------------------
 
   function rememberContactChat(roomId, token, itemId, itemTitle) {
     const link =
@@ -375,7 +472,13 @@ export default function App() {
     return link;
   }
 
+  // ------------------------------
+  // สร้างห้องแชต
+  // ------------------------------
+
   async function createChatRoom(itemId) {
+    if (saving) return;
+
     if (!contactMessage.trim()) {
       alert("กรุณาพิมพ์ข้อความ");
       return;
@@ -395,8 +498,14 @@ export default function App() {
 
       if (error) throw error;
 
-      const roomId = data.room_id;
-      const token = data.contact_token;
+      const result = getRpcObject(data);
+      const roomId = result.room_id;
+      const token = result.contact_token;
+
+      if (!roomId || !token) {
+        throw new Error("ไม่ได้รับข้อมูลห้องแชตจากระบบ");
+      }
+
       const item = items.find(
         (entry) => String(entry.id) === String(itemId)
       );
@@ -417,36 +526,49 @@ export default function App() {
 
       await loadContactChat(roomId, token);
 
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
       alert("สร้างห้องแชตเรียบร้อยแล้ว กรุณาเก็บลิงก์ไว้");
     } catch (error) {
-      alert("สร้างห้องแชตไม่สำเร็จ: " + error.message);
+      alert("สร้างห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
     } finally {
       setSaving(false);
     }
   }
 
+  // ------------------------------
+  // ส่งข้อความผู้ติดต่อ
+  // ------------------------------
+
   async function sendContactReply(event) {
     event.preventDefault();
 
-    if (!contactReply.trim()) return;
-
-    const { error } = await supabase.rpc(
-      "send_private_chat_message_contact",
-      {
-        p_room_id: contactRoomId,
-        p_contact_token: contactToken,
-        p_message: contactReply.trim(),
-      }
-    );
-
-    if (error) {
-      alert("ส่งข้อความไม่สำเร็จ: " + error.message);
+    if (!contactReply.trim() || !contactRoomId || !contactToken) {
       return;
     }
 
-    setContactReply("");
-    await loadContactChat(contactRoomId, contactToken);
+    try {
+      const { error } = await supabase.rpc(
+        "send_private_chat_message_contact",
+        {
+          p_room_id: contactRoomId,
+          p_contact_token: contactToken,
+          p_message: contactReply.trim(),
+        }
+      );
+
+      if (error) throw error;
+
+      setContactReply("");
+      await loadContactChat(contactRoomId, contactToken);
+    } catch (error) {
+      alert("ส่งข้อความไม่สำเร็จ: " + getErrorMessage(error));
+    }
   }
+
+  // ------------------------------
+  // เปิดแชตที่เคยบันทึกไว้
+  // ------------------------------
 
   async function openSavedContactChat(room) {
     setChatView(false);
@@ -465,6 +587,10 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // ------------------------------
+  // โหลดข้อมูลเจ้าของประกาศ
+  // ------------------------------
+
   async function loadManageMessages(event) {
     if (event) event.preventDefault();
 
@@ -475,58 +601,63 @@ export default function App() {
 
     const itemId = Number(manageId);
 
-    const { data: oldMessages, error: oldError } =
-      await supabase.rpc("get_contact_messages", {
-        p_item_id: itemId,
-        p_manage_token: manageToken.trim(),
-      });
-
-    if (oldError) {
-      alert("เปิดข้อมูลไม่สำเร็จ ตรวจสอบรหัสอีกครั้ง");
-      setManageLoaded(false);
+    if (!Number.isInteger(itemId) || itemId <= 0) {
+      alert("รหัสประกาศไม่ถูกต้อง");
       return;
     }
 
-    const { data: rooms, error: roomsError } =
-      await supabase.rpc("owner_list_private_chat_rooms", {
-        p_item_id: itemId,
-        p_manage_token: manageToken.trim(),
-      });
+    try {
+      const { data: oldMessages, error: oldError } =
+        await supabase.rpc("get_contact_messages", {
+          p_item_id: itemId,
+          p_manage_token: manageToken.trim(),
+        });
 
-    if (roomsError) {
-      alert("โหลดห้องแชตไม่สำเร็จ: " + roomsError.message);
+      if (oldError) throw oldError;
+
+      const { data: rooms, error: roomsError } =
+        await supabase.rpc("owner_list_private_chat_rooms", {
+          p_item_id: itemId,
+          p_manage_token: manageToken.trim(),
+        });
+
+      if (roomsError) throw roomsError;
+
+      const item = items.find(
+        (entry) => String(entry.id) === String(itemId)
+      );
+
+      setManageStatus(item?.status || "searching");
+      setMessages(oldMessages || []);
+      setOwnerRooms(rooms || []);
+      setSelectedOwnerRoom(null);
+      setOwnerChatMessages([]);
+      setManageLoaded(true);
+
+      const ownerEntry = {
+        item_id: String(itemId),
+        token: manageToken.trim(),
+        title: item?.title || `ประกาศ #${itemId}`,
+      };
+
+      const updated = [
+        ...readStorage(OWNER_STORAGE).filter(
+          (entry) => String(entry.item_id) !== String(itemId)
+        ),
+        ownerEntry,
+      ];
+
+      saveStorage(OWNER_STORAGE, updated);
+      setSavedOwnerItems(updated);
+    } catch (error) {
+      alert("เปิดข้อมูลไม่สำเร็จ: " + getErrorMessage(error));
       setManageLoaded(false);
-      return;
     }
-
-    const item = items.find(
-      (entry) => String(entry.id) === String(itemId)
-    );
-
-    setManageStatus(item?.status || "searching");
-    setMessages(oldMessages || []);
-    setOwnerRooms(rooms || []);
-    setSelectedOwnerRoom(null);
-    setOwnerChatMessages([]);
-    setManageLoaded(true);
-
-    // บันทึกรหัสเจ้าของประกาศไว้ในเครื่อง
-    const ownerEntry = {
-      item_id: String(itemId),
-      token: manageToken.trim(),
-      title: item?.title || `ประกาศ #${itemId}`,
-    };
-
-    const updated = [
-      ...readStorage(OWNER_STORAGE).filter(
-        (entry) => String(entry.item_id) !== String(itemId)
-      ),
-      ownerEntry,
-    ];
-
-    saveStorage(OWNER_STORAGE, updated);
-    setSavedOwnerItems(updated);
   }
+
+  // ------------------------------
+  // โหลดห้องแชตทั้งหมดของเจ้าของ
+  // ------------------------------
 
   async function loadAllOwnerRooms() {
     const owners = readStorage(OWNER_STORAGE);
@@ -543,7 +674,7 @@ export default function App() {
 
       if (error) {
         console.warn(
-          "โหลดห้องแชตประกาศ #" + owner.item_id + " ไม่สำเร็จ",
+          "โหลดห้องแชตไม่สำเร็จ:",
           error.message
         );
         continue;
@@ -568,6 +699,10 @@ export default function App() {
     setOwnerRooms(allRooms);
   }
 
+  // ------------------------------
+  // เปิดแชตเจ้าของประกาศ
+  // ------------------------------
+
   async function openOwnerRoom(room) {
     setSelectedOwnerRoom(room);
     setOwnerChatLoading(true);
@@ -575,76 +710,98 @@ export default function App() {
 
     const token = room.owner_token || manageToken.trim();
 
-    const { data, error } = await supabase.rpc(
-      "owner_get_private_chat_messages",
-      {
-        p_room_id: room.room_id,
-        p_manage_token: token,
-      }
-    );
+    try {
+      const { data, error } = await supabase.rpc(
+        "owner_get_private_chat_messages",
+        {
+          p_room_id: room.room_id,
+          p_manage_token: token,
+        }
+      );
 
-    if (error) {
-      alert("เปิดห้องแชตไม่สำเร็จ: " + error.message);
-      setOwnerChatMessages([]);
-    } else {
+      if (error) throw error;
+
       setOwnerChatMessages(data || []);
+    } catch (error) {
+      alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
+      setOwnerChatMessages([]);
+    } finally {
+      setOwnerChatLoading(false);
     }
-
-    setOwnerChatLoading(false);
   }
+
+  // ------------------------------
+  // ส่งข้อความเจ้าของประกาศ
+  // ------------------------------
 
   async function sendOwnerReply(event) {
     event.preventDefault();
 
     if (!ownerReply.trim() || !selectedOwnerRoom) return;
 
-    const token =
-      selectedOwnerRoom.owner_token || manageToken.trim();
+    const room = selectedOwnerRoom;
+    const token = room.owner_token || manageToken.trim();
 
-    const { error } = await supabase.rpc(
-      "owner_send_private_chat_message",
-      {
-        p_room_id: selectedOwnerRoom.room_id,
-        p_manage_token: token,
-        p_message: ownerReply.trim(),
-      }
-    );
+    try {
+      const { error } = await supabase.rpc(
+        "owner_send_private_chat_message",
+        {
+          p_room_id: room.room_id,
+          p_manage_token: token,
+          p_message: ownerReply.trim(),
+        }
+      );
 
-    if (error) {
-      alert("ส่งข้อความไม่สำเร็จ: " + error.message);
-      return;
+      if (error) throw error;
+
+      setOwnerReply("");
+
+      await openOwnerRoom(room);
+      await loadAllOwnerRooms();
+    } catch (error) {
+      alert("ส่งข้อความไม่สำเร็จ: " + getErrorMessage(error));
     }
-
-    setOwnerReply("");
-    await openOwnerRoom(selectedOwnerRoom);
-    await loadAllOwnerRooms();
   }
+
+  // ------------------------------
+  // เปลี่ยนสถานะประกาศ
+  // ------------------------------
 
   async function changeStatus(event) {
     event.preventDefault();
 
-    const { error } = await supabase.rpc("update_item_status", {
-      p_item_id: Number(manageId),
-      p_manage_token: manageToken.trim(),
-      p_status: manageStatus,
-    });
+    if (!manageId.trim() || !manageToken.trim()) return;
 
-    if (error) {
-      alert("เปลี่ยนสถานะไม่สำเร็จ: " + error.message);
-      return;
+    try {
+      const { error } = await supabase.rpc("update_item_status", {
+        p_item_id: Number(manageId),
+        p_manage_token: manageToken.trim(),
+        p_status: manageStatus,
+      });
+
+      if (error) throw error;
+
+      alert("เปลี่ยนสถานะเรียบร้อยแล้ว");
+
+      await fetchItems();
+    } catch (error) {
+      alert("เปลี่ยนสถานะไม่สำเร็จ: " + getErrorMessage(error));
     }
-
-    alert("เปลี่ยนสถานะเรียบร้อยแล้ว");
-    await fetchItems();
   }
+
+  // ------------------------------
+  // คัดลอกรหัสและลิงก์
+  // ------------------------------
 
   async function copyToken() {
     if (!createdSecret) return;
 
+    const text =
+      `รหัสประกาศ: ${createdSecret.id}\n` +
+      `รหัสจัดการ: ${createdSecret.token}`;
+
     try {
-      await navigator.clipboard.writeText(
-        `รหัสประกาศ: ${createdSecret.id}\nรหัสจัดการ: ${createdSecret.token}`
-      );
+      await navigator.clipboard.writeText(text);
       alert("คัดลอกรหัสแล้ว กรุณาเก็บไว้ให้ดี");
     } catch {
       alert("ไม่สามารถคัดลอกได้ กรุณาจดรหัสเก็บไว้");
@@ -662,15 +819,20 @@ export default function App() {
     }
   }
 
+  // ------------------------------
+  // เปิดและปิดกล่องข้อความ
+  // ------------------------------
+
   async function openChatDashboard() {
     setChatView(true);
     setContactRoomId("");
     setContactToken("");
+    setContactChatMessages([]);
     setSelectedOwnerRoom(null);
     setOwnerChatMessages([]);
-    setContactChatMessages([]);
 
     await loadAllOwnerRooms();
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -680,6 +842,8 @@ export default function App() {
     setOwnerChatMessages([]);
     setContactRoomId("");
     setContactToken("");
+    setContactChatMessages([]);
+
     window.history.replaceState(
       null,
       "",
@@ -687,21 +851,25 @@ export default function App() {
     );
   }
 
-  const visibleItems = filteredItems.filter(
-    (item) => item.status !== "returned"
-  );
-
   const currentCategoryName =
     categories.find((item) => item.id === categoryFilter)?.name ||
     "ทั้งหมด";
 
+  // ------------------------------
+  // หน้าตาเว็บไซต์
+  // ------------------------------
+
   return (
     <main className="app">
+
+      {/* ส่วนหัวเว็บไซต์ */}
+
       <header className="site-header">
         <h1>
           <Home size={28} style={iconStyle} />
           School Lost &amp; Found
         </h1>
+
         <p>ระบบแจ้งของหายและของที่พบภายในโรงเรียน</p>
 
         <button
@@ -711,16 +879,19 @@ export default function App() {
         >
           <MessageCircle size={19} style={iconStyle} />
           กล่องข้อความของฉัน
-          {savedContactChats.length + ownerRooms.length > 0 && (
+          {savedContactChats.length + savedOwnerItems.length > 0 && (
             <span>
-              {" "}({savedContactChats.length + ownerRooms.length})
+              {" "}({savedContactChats.length + savedOwnerItems.length})
             </span>
           )}
         </button>
       </header>
 
+      {/* กล่องข้อความ */}
+
       {chatView && (
         <section className="manage-section">
+
           <button type="button" onClick={closeChatDashboard}>
             <ArrowLeft size={17} style={iconStyle} />
             กลับหน้าเว็บไซต์
@@ -756,6 +927,8 @@ export default function App() {
             </button>
           </div>
 
+          {/* แชตผู้ติดต่อ */}
+
           {chatTab === "contact" && (
             <>
               <h3>ห้องแชตที่ฉันเคยติดต่อ</h3>
@@ -764,15 +937,14 @@ export default function App() {
                 <p>ยังไม่มีห้องแชตที่บันทึกไว้ในเครื่องนี้</p>
               ) : (
                 savedContactChats.map((room) => (
-                  <article
-                    className="message-card"
-                    key={room.room_id}
-                  >
+                  <article className="message-card" key={room.room_id}>
                     <strong>
                       <MessageCircle size={16} style={iconStyle} />
                       {room.item_title || "ประกาศ"}
                     </strong>
+
                     <p>รหัสห้องแชต: {room.room_id}</p>
+
                     <button
                       type="button"
                       onClick={() => openSavedContactChat(room)}
@@ -785,14 +957,16 @@ export default function App() {
             </>
           )}
 
+          {/* แชตเจ้าของประกาศ */}
+
           {chatTab === "owner" && (
             <>
               <h3>ห้องแชตในประกาศของฉัน</h3>
 
               {ownerRooms.length === 0 ? (
                 <p>
-                  ยังไม่พบห้องแชต หากมีประกาศเดิมที่ต้องการเพิ่ม
-                  ให้กรอกรหัสประกาศและรหัสจัดการในส่วนจัดการประกาศก่อน
+                  ยังไม่พบห้องแชต
+                  กรุณาเปิดข้อมูลประกาศในส่วนจัดการประกาศก่อน
                 </p>
               ) : (
                 ownerRooms.map((room) => (
@@ -804,15 +978,16 @@ export default function App() {
                       <UserRound size={16} style={iconStyle} />
                       {room.contact_name || "ผู้ติดต่อ"}
                     </strong>
+
                     <p>
                       ประกาศ: {room.item_title || `#${room.item_id}`}
                     </p>
+
                     <small>
                       <Clock size={13} style={iconStyle} />
-                      {room.last_message_at
-                        ? new Date(room.last_message_at).toLocaleString("th-TH")
-                        : "ยังไม่มีเวลาอัปเดต"}
+                      {formatDate(room.last_message_at)}
                     </small>
+
                     <button
                       type="button"
                       onClick={() => openOwnerRoom(room)}
@@ -826,7 +1001,7 @@ export default function App() {
               {selectedOwnerRoom && (
                 <div className="owner-chat">
                   <h3>
-                    แชตกับ {selectedOwnerRoom.contact_name}
+                    แชตกับ {selectedOwnerRoom.contact_name || "ผู้ติดต่อ"}
                   </h3>
 
                   {ownerChatLoading ? (
@@ -843,10 +1018,9 @@ export default function App() {
                               ? "คุณ (เจ้าของประกาศ)"
                               : selectedOwnerRoom.contact_name}
                           </strong>
+
                           <p>{message.message}</p>
-                          <small>
-                            {new Date(message.created_at).toLocaleString("th-TH")}
-                          </small>
+                          <small>{formatDate(message.created_at)}</small>
                         </article>
                       ))}
                     </div>
@@ -854,6 +1028,7 @@ export default function App() {
 
                   <form onSubmit={sendOwnerReply}>
                     <label>ตอบกลับผู้ติดต่อ</label>
+
                     <textarea
                       value={ownerReply}
                       onChange={(e) => setOwnerReply(e.target.value)}
@@ -861,14 +1036,15 @@ export default function App() {
                       maxLength={2000}
                       placeholder="พิมพ์ข้อความ..."
                     />
-                    <button type="submit">
-                      ส่งข้อความ
-                    </button>
+
+                    <button type="submit">ส่งข้อความ</button>
                   </form>
                 </div>
               )}
             </>
           )}
+
+          {/* แชตผู้ติดต่อที่เปิดจากลิงก์ */}
 
           {contactRoomId && (
             <div className="owner-chat">
@@ -879,16 +1055,18 @@ export default function App() {
               ) : (
                 <div className="chat-messages">
                   {contactChatMessages.map((message) => (
-                    <article className="message-card" key={message.id}>
+                    <article
+                      className="message-card"
+                      key={message.id}
+                    >
                       <strong>
                         {message.sender_role === "owner"
                           ? "เจ้าของประกาศ"
                           : "คุณ"}
                       </strong>
+
                       <p>{message.message}</p>
-                      <small>
-                        {new Date(message.created_at).toLocaleString("th-TH")}
-                      </small>
+                      <small>{formatDate(message.created_at)}</small>
                     </article>
                   ))}
                 </div>
@@ -896,6 +1074,7 @@ export default function App() {
 
               <form onSubmit={sendContactReply}>
                 <label>พิมพ์ข้อความตอบกลับ</label>
+
                 <textarea
                   value={contactReply}
                   onChange={(e) => setContactReply(e.target.value)}
@@ -903,15 +1082,20 @@ export default function App() {
                   maxLength={2000}
                   placeholder="พิมพ์ข้อความ..."
                 />
+
                 <button type="submit">ส่งข้อความ</button>
               </form>
             </div>
           )}
+
         </section>
       )}
 
       {!chatView && (
         <>
+
+          {/* แบบฟอร์มลงประกาศ */}
+
           <section className="form-section">
             <h2>
               <PlusCircle size={22} style={iconStyle} />
@@ -920,6 +1104,7 @@ export default function App() {
 
             <form onSubmit={handleSubmit}>
               <label>ประเภทประกาศ</label>
+
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
@@ -929,6 +1114,7 @@ export default function App() {
               </select>
 
               <label>หมวดหมู่สิ่งของ</label>
+
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -943,6 +1129,7 @@ export default function App() {
               </select>
 
               <label>ชื่อสิ่งของ</label>
+
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -952,6 +1139,7 @@ export default function App() {
               />
 
               <label>รายละเอียด</label>
+
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -963,6 +1151,7 @@ export default function App() {
                 <MapPin size={16} style={iconStyle} />
                 สถานที่ที่หายหรือพบ
               </label>
+
               <input
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
@@ -970,6 +1159,7 @@ export default function App() {
               />
 
               <label>รูปภาพ (สูงสุด 5 รูป)</label>
+
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -985,6 +1175,7 @@ export default function App() {
                       key={`${file.name}-${index}`}
                     >
                       <span>{file.name}</span>
+
                       <button
                         type="button"
                         onClick={() => removeImage(index)}
@@ -1000,12 +1191,18 @@ export default function App() {
                 ห้ามใส่ข้อมูลส่วนตัวหรือภาพบัตรนักเรียนในประกาศ
               </p>
 
-              <button className="primary-button" disabled={saving}>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={saving}
+              >
                 <PlusCircle size={18} style={iconStyle} />
                 {saving ? "กำลังลงประกาศ..." : "ลงประกาศ"}
               </button>
             </form>
           </section>
+
+          {/* รหัสประกาศ */}
 
           {createdSecret && (
             <section className="secret-box">
@@ -1013,16 +1210,21 @@ export default function App() {
                 <CheckCircle size={22} style={iconStyle} />
                 ประกาศสำเร็จ!
               </h2>
+
               <p>เก็บรหัสทั้งสองรายการนี้ไว้</p>
+
               <p>
                 <strong>รหัสประกาศ:</strong> {createdSecret.id}
               </p>
+
               <p className="token-text">
                 <strong>รหัสจัดการ:</strong> {createdSecret.token}
               </p>
+
               <button type="button" onClick={copyToken}>
                 คัดลอกรหัสเก็บไว้
               </button>
+
               <button
                 type="button"
                 onClick={() => setCreatedSecret(null)}
@@ -1032,21 +1234,27 @@ export default function App() {
             </section>
           )}
 
+          {/* ลิงก์แชต */}
+
           {createdChatLink && (
             <section className="secret-box">
               <h2>
                 <CheckCircle size={22} style={iconStyle} />
                 สร้างห้องแชตสำเร็จ!
               </h2>
+
               <p>คัดลอกลิงก์นี้เก็บไว้ด้วย</p>
+
               <input
                 value={createdChatLink}
                 readOnly
                 onFocus={(e) => e.target.select()}
               />
+
               <button type="button" onClick={copyChatLink}>
                 คัดลอกลิงก์แชต
               </button>
+
               <button
                 type="button"
                 onClick={() => setCreatedChatLink("")}
@@ -1055,6 +1263,8 @@ export default function App() {
               </button>
             </section>
           )}
+
+          {/* แชตส่วนตัว */}
 
           {contactRoomId && (
             <section className="manage-section">
@@ -1068,16 +1278,18 @@ export default function App() {
               ) : (
                 <div className="chat-messages">
                   {contactChatMessages.map((message) => (
-                    <article className="message-card" key={message.id}>
+                    <article
+                      className="message-card"
+                      key={message.id}
+                    >
                       <strong>
                         {message.sender_role === "owner"
                           ? "เจ้าของประกาศ"
                           : "คุณ"}
                       </strong>
+
                       <p>{message.message}</p>
-                      <small>
-                        {new Date(message.created_at).toLocaleString("th-TH")}
-                      </small>
+                      <small>{formatDate(message.created_at)}</small>
                     </article>
                   ))}
                 </div>
@@ -1085,6 +1297,7 @@ export default function App() {
 
               <form onSubmit={sendContactReply}>
                 <label>พิมพ์ข้อความตอบกลับ</label>
+
                 <textarea
                   value={contactReply}
                   onChange={(e) => setContactReply(e.target.value)}
@@ -1092,7 +1305,9 @@ export default function App() {
                   maxLength={2000}
                   placeholder="พิมพ์ข้อความ..."
                 />
+
                 <button type="submit">ส่งข้อความ</button>
+
                 <button
                   type="button"
                   onClick={() =>
@@ -1105,15 +1320,21 @@ export default function App() {
             </section>
           )}
 
+          {/* จัดการประกาศ */}
+
           <section className="manage-section">
             <h2>
               <UserRound size={22} style={iconStyle} />
               จัดการประกาศและอ่านข้อความ
             </h2>
-            <p>กรอกรหัสประกาศและรหัสจัดการที่ได้รับตอนลงประกาศ</p>
+
+            <p>
+              กรอกรหัสประกาศและรหัสจัดการที่ได้รับตอนลงประกาศ
+            </p>
 
             <form onSubmit={loadManageMessages}>
               <label>รหัสประกาศ</label>
+
               <input
                 value={manageId}
                 onChange={(e) => setManageId(e.target.value)}
@@ -1121,6 +1342,7 @@ export default function App() {
               />
 
               <label>รหัสจัดการ</label>
+
               <input
                 value={manageToken}
                 onChange={(e) => setManageToken(e.target.value)}
@@ -1135,8 +1357,10 @@ export default function App() {
 
             {manageLoaded && (
               <div className="manage-result">
+
                 <form onSubmit={changeStatus}>
                   <label>เปลี่ยนสถานะ</label>
+
                   <select
                     value={manageStatus}
                     onChange={(e) => setManageStatus(e.target.value)}
@@ -1145,6 +1369,7 @@ export default function App() {
                     <option value="found">พบของแล้ว</option>
                     <option value="returned">ส่งคืนเจ้าของแล้ว</option>
                   </select>
+
                   <button type="submit">
                     <PackageCheck size={17} style={iconStyle} />
                     บันทึกสถานะ
@@ -1166,14 +1391,13 @@ export default function App() {
                     >
                       <strong>
                         <UserRound size={16} style={iconStyle} />
-                        {room.contact_name}
+                        {room.contact_name || "ผู้ติดต่อ"}
                       </strong>
+
                       <p>
-                        อัปเดตล่าสุด:{" "}
-                        {room.last_message_at
-                          ? new Date(room.last_message_at).toLocaleString("th-TH")
-                          : "-"}
+                        อัปเดตล่าสุด: {formatDate(room.last_message_at)}
                       </p>
+
                       <button
                         type="button"
                         onClick={() =>
@@ -1193,7 +1417,7 @@ export default function App() {
                 {selectedOwnerRoom && (
                   <div className="owner-chat">
                     <h3>
-                      แชตกับ {selectedOwnerRoom.contact_name}
+                      แชตกับ {selectedOwnerRoom.contact_name || "ผู้ติดต่อ"}
                     </h3>
 
                     {ownerChatLoading ? (
@@ -1210,10 +1434,9 @@ export default function App() {
                                 ? "คุณ (เจ้าของประกาศ)"
                                 : selectedOwnerRoom.contact_name}
                             </strong>
+
                             <p>{message.message}</p>
-                            <small>
-                              {new Date(message.created_at).toLocaleString("th-TH")}
-                            </small>
+                            <small>{formatDate(message.created_at)}</small>
                           </article>
                         ))}
                       </div>
@@ -1221,6 +1444,7 @@ export default function App() {
 
                     <form onSubmit={sendOwnerReply}>
                       <label>ตอบกลับผู้ติดต่อ</label>
+
                       <textarea
                         value={ownerReply}
                         onChange={(e) => setOwnerReply(e.target.value)}
@@ -1228,7 +1452,9 @@ export default function App() {
                         maxLength={2000}
                         placeholder="พิมพ์ข้อความ..."
                       />
+
                       <button type="submit">ส่งข้อความ</button>
+
                       <button
                         type="button"
                         onClick={() => openOwnerRoom(selectedOwnerRoom)}
@@ -1240,6 +1466,7 @@ export default function App() {
                 )}
 
                 <h3>ข้อความจากระบบเดิม</h3>
+
                 {messages.length === 0 ? (
                   <p>ยังไม่มีข้อความเดิม</p>
                 ) : (
@@ -1248,16 +1475,17 @@ export default function App() {
                       <strong>
                         {message.sender_name || "ผู้ไม่ระบุชื่อ"}
                       </strong>
+
                       <p>{message.message}</p>
-                      <small>
-                        {new Date(message.created_at).toLocaleString("th-TH")}
-                      </small>
+                      <small>{formatDate(message.created_at)}</small>
                     </article>
                   ))
                 )}
               </div>
             )}
           </section>
+
+          {/* รายการประกาศ */}
 
           <section className="items-section">
             <h2>
@@ -1276,6 +1504,7 @@ export default function App() {
                   color: "#777",
                 }}
               />
+
               <input
                 className="search-input"
                 style={{ paddingLeft: "40px" }}
@@ -1311,7 +1540,8 @@ export default function App() {
             </div>
 
             <p>
-              กำลังแสดงหมวดหมู่: <strong>{currentCategoryName}</strong>
+              กำลังแสดงหมวดหมู่:{" "}
+              <strong>{currentCategoryName}</strong>
             </p>
 
             <div className="filters">
@@ -1331,20 +1561,21 @@ export default function App() {
                 <option value="all">ทุกสถานะ</option>
                 <option value="searching">กำลังตามหา</option>
                 <option value="found">พบของแล้ว</option>
-                <option value="returned">ส่งคืนเจ้าของแล้ว</option>
               </select>
             </div>
 
             {loading ? (
               <p>กำลังโหลดประกาศ...</p>
-            ) : visibleItems.length === 0 ? (
+            ) : filteredItems.length === 0 ? (
               <p>ไม่พบประกาศในหมวดหมู่นี้</p>
             ) : (
               <div className="item-grid">
-                {visibleItems.map((item) => {
+                {filteredItems.map((item) => {
                   const itemCategory = categories.find(
-                    (entry) => entry.id === (item.category || "other")
+                    (entry) =>
+                      entry.id === (item.category || "other")
                   );
+
                   const CategoryIcon = itemCategory?.icon || Package;
 
                   return (
@@ -1366,6 +1597,7 @@ export default function App() {
                           ) : (
                             <Clock size={14} style={iconStyle} />
                           )}
+
                           {statusLabels[item.status] || item.status}
                         </span>
                       </div>
@@ -1376,6 +1608,7 @@ export default function App() {
                       </p>
 
                       <h3>{item.title}</h3>
+
                       <p>{item.description || "ไม่มีรายละเอียด"}</p>
 
                       <p>
@@ -1386,8 +1619,7 @@ export default function App() {
 
                       <small>
                         <Clock size={13} style={iconStyle} />
-                        วันที่ลงประกาศ:{" "}
-                        {new Date(item.created_at).toLocaleString("th-TH")}
+                        วันที่ลงประกาศ: {formatDate(item.created_at)}
                       </small>
 
                       {item.image_urls?.length > 0 && (
@@ -1397,7 +1629,7 @@ export default function App() {
                               href={url}
                               target="_blank"
                               rel="noreferrer"
-                              key={index}
+                              key={`${item.id}-${index}`}
                             >
                               <img
                                 src={url}
@@ -1414,6 +1646,7 @@ export default function App() {
                           setOpenContactId(
                             openContactId === item.id ? null : item.id
                           );
+
                           setContactName("");
                           setContactMessage("");
                         }}
@@ -1428,6 +1661,7 @@ export default function App() {
                             <UserRound size={15} style={iconStyle} />
                             ชื่อผู้ติดต่อ (ไม่บังคับ)
                           </label>
+
                           <input
                             value={contactName}
                             onChange={(e) =>
@@ -1438,6 +1672,7 @@ export default function App() {
                           />
 
                           <label>ข้อความ</label>
+
                           <textarea
                             value={contactMessage}
                             onChange={(e) =>
@@ -1469,10 +1704,13 @@ export default function App() {
         </>
       )}
 
+      {/* ท้ายเว็บไซต์ */}
+
       <footer className="site-footer">
         <Home size={16} style={iconStyle} />
         School Lost &amp; Found
       </footer>
+
     </main>
   );
 }
