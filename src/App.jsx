@@ -3,10 +3,28 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
+import {
+  Search,
+  PlusCircle,
+  MessageCircle,
+  MapPin,
+  PackageCheck,
+  UserRound,
+  Home,
+  Clock,
+  CheckCircle,
+} from "lucide-react";
+
 const statusLabels = {
   searching: "กำลังตามหา",
   found: "พบของแล้ว",
   returned: "ส่งคืนเจ้าของแล้ว",
+};
+
+const iconStyle = {
+  display: "inline-block",
+  verticalAlign: "middle",
+  marginRight: "7px",
 };
 
 function makeToken() {
@@ -80,7 +98,6 @@ export default function App() {
     setLoading(false);
   }
 
-  // โหลดแชตของผู้ติดต่อจากลิงก์ส่วนตัว
   async function loadContactChat(roomId, token) {
     setContactChatLoading(true);
 
@@ -105,7 +122,6 @@ export default function App() {
   useEffect(() => {
     fetchItems();
 
-    // ตรวจสอบว่ามีลิงก์แชตส่วนตัวหรือไม่
     const params = new URLSearchParams(
       window.location.hash.slice(1)
     );
@@ -238,7 +254,6 @@ export default function App() {
     }
   }
 
-  // สร้างห้องแชตใหม่
   async function createChatRoom(itemId) {
     if (!contactMessage.trim()) {
       alert("กรุณาพิมพ์ข้อความ");
@@ -286,7 +301,6 @@ export default function App() {
     }
   }
 
-  // ผู้ติดต่อส่งข้อความ
   async function sendContactReply(event) {
     event.preventDefault();
 
@@ -310,7 +324,6 @@ export default function App() {
     await loadContactChat(contactRoomId, contactToken);
   }
 
-  // เจ้าของเปิดข้อมูลประกาศและรายการห้องแชต
   async function loadManageMessages(event) {
     event.preventDefault();
 
@@ -355,7 +368,6 @@ export default function App() {
     setManageLoaded(true);
   }
 
-  // เจ้าของเปิดห้องแชตของผู้ติดต่อ
   async function openOwnerRoom(room) {
     setSelectedOwnerRoom(room);
     setOwnerChatLoading(true);
@@ -378,7 +390,6 @@ export default function App() {
     setOwnerChatLoading(false);
   }
 
-  // เจ้าของตอบข้อความ
   async function sendOwnerReply(event) {
     event.preventDefault();
 
@@ -447,12 +458,18 @@ export default function App() {
   return (
     <main className="app">
       <header className="site-header">
-        <h1>School Lost &amp; Found</h1>
+        <h1>
+          <Home size={28} style={iconStyle} />
+          School Lost &amp; Found
+        </h1>
         <p>ระบบแจ้งของหายและของที่พบภายในโรงเรียน</p>
       </header>
 
       <section className="form-section">
-        <h2>ลงประกาศใหม่</h2>
+        <h2>
+          <PlusCircle size={22} style={iconStyle} />
+          ลงประกาศใหม่
+        </h2>
 
         <form onSubmit={handleSubmit}>
           <label>ประเภทประกาศ</label>
@@ -478,7 +495,10 @@ export default function App() {
             rows={3}
           />
 
-          <label>สถานที่ที่หายหรือพบ</label>
+          <label>
+            <MapPin size={16} style={iconStyle} />
+            สถานที่ที่หายหรือพบ
+          </label>
           <input
             value={location}
             onChange={(e) => setLocation(e.target.value)}
@@ -511,6 +531,7 @@ export default function App() {
           </p>
 
           <button className="primary-button" disabled={saving}>
+            <PlusCircle size={18} style={iconStyle} />
             {saving ? "กำลังลงประกาศ..." : "ลงประกาศ"}
           </button>
         </form>
@@ -518,7 +539,10 @@ export default function App() {
 
       {createdSecret && (
         <section className="secret-box">
-          <h2>ประกาศสำเร็จ!</h2>
+          <h2>
+            <CheckCircle size={22} style={iconStyle} />
+            ประกาศสำเร็จ!
+          </h2>
           <p>เก็บรหัสทั้งสองรายการนี้ไว้ เพื่อจัดการประกาศในภายหลัง</p>
           <p><strong>รหัสประกาศ:</strong> {createdSecret.id}</p>
           <p className="token-text">
@@ -535,7 +559,10 @@ export default function App() {
 
       {createdChatLink && (
         <section className="secret-box">
-          <h2>สร้างห้องแชตสำเร็จ!</h2>
+          <h2>
+            <CheckCircle size={22} style={iconStyle} />
+            สร้างห้องแชตสำเร็จ!
+          </h2>
           <p>คัดลอกลิงก์นี้เก็บไว้ เพื่อกลับมาอ่านข้อความและตอบกลับภายหลัง</p>
           <input
             value={createdChatLink}
@@ -545,19 +572,18 @@ export default function App() {
           <button type="button" onClick={copyChatLink}>
             คัดลอกลิงก์แชต
           </button>
-          <button
-            type="button"
-            onClick={() => setCreatedChatLink("")}
-          >
+          <button type="button" onClick={() => setCreatedChatLink("")}>
             ปิด
           </button>
         </section>
       )}
 
-      {/* หน้าห้องแชตของผู้ติดต่อ */}
       {contactRoomId && (
         <section className="manage-section">
-          <h2>แชตส่วนตัวของคุณ</h2>
+          <h2>
+            <MessageCircle size={22} style={iconStyle} />
+            แชตส่วนตัวของคุณ
+          </h2>
           <p>ห้องสนทนานี้เป็นส่วนตัว กรุณาเก็บลิงก์ไว้</p>
 
           {contactChatLoading ? (
@@ -570,12 +596,14 @@ export default function App() {
                 contactChatMessages.map((message) => (
                   <article className="message-card" key={message.id}>
                     <strong>
+                      <UserRound size={16} style={iconStyle} />
                       {message.sender_role === "owner"
                         ? "เจ้าของประกาศ"
                         : "คุณ"}
                     </strong>
                     <p>{message.message}</p>
                     <small>
+                      <Clock size={13} style={iconStyle} />
                       {new Date(message.created_at).toLocaleString("th-TH")}
                     </small>
                   </article>
@@ -593,7 +621,10 @@ export default function App() {
               maxLength={2000}
               placeholder="พิมพ์ข้อความ..."
             />
-            <button type="submit">ส่งข้อความ</button>
+            <button type="submit">
+              <MessageCircle size={17} style={iconStyle} />
+              ส่งข้อความ
+            </button>
             <button
               type="button"
               onClick={() => loadContactChat(contactRoomId, contactToken)}
@@ -605,7 +636,10 @@ export default function App() {
       )}
 
       <section className="manage-section">
-        <h2>จัดการประกาศและอ่านข้อความ</h2>
+        <h2>
+          <UserRound size={22} style={iconStyle} />
+          จัดการประกาศและอ่านข้อความ
+        </h2>
         <p>กรอกรหัสประกาศและรหัสจัดการที่ได้รับตอนลงประกาศ</p>
 
         <form onSubmit={loadManageMessages}>
@@ -623,7 +657,10 @@ export default function App() {
             placeholder="วางรหัสจัดการของคุณ"
           />
 
-          <button type="submit">เปิดข้อมูลประกาศ</button>
+          <button type="submit">
+            <CheckCircle size={17} style={iconStyle} />
+            เปิดข้อมูลประกาศ
+          </button>
         </form>
 
         {manageLoaded && (
@@ -638,18 +675,28 @@ export default function App() {
                 <option value="found">พบของแล้ว</option>
                 <option value="returned">ส่งคืนเจ้าของแล้ว</option>
               </select>
-              <button type="submit">บันทึกสถานะ</button>
+              <button type="submit">
+                <PackageCheck size={17} style={iconStyle} />
+                บันทึกสถานะ
+              </button>
             </form>
 
-            <h3>ห้องแชตส่วนตัว ({ownerRooms.length})</h3>
+            <h3>
+              <MessageCircle size={19} style={iconStyle} />
+              ห้องแชตส่วนตัว ({ownerRooms.length})
+            </h3>
 
             {ownerRooms.length === 0 ? (
               <p>ยังไม่มีห้องแชต</p>
             ) : (
               ownerRooms.map((room) => (
                 <article className="message-card" key={room.room_id}>
-                  <strong>{room.contact_name}</strong>
+                  <strong>
+                    <UserRound size={16} style={iconStyle} />
+                    {room.contact_name}
+                  </strong>
                   <p>
+                    <Clock size={13} style={iconStyle} />
                     อัปเดตล่าสุด:{" "}
                     {new Date(room.last_message_at).toLocaleString("th-TH")}
                   </p>
@@ -657,6 +704,7 @@ export default function App() {
                     type="button"
                     onClick={() => openOwnerRoom(room)}
                   >
+                    <MessageCircle size={17} style={iconStyle} />
                     เปิดห้องแชต
                   </button>
                 </article>
@@ -665,7 +713,10 @@ export default function App() {
 
             {selectedOwnerRoom && (
               <div className="owner-chat">
-                <h3>แชตกับ {selectedOwnerRoom.contact_name}</h3>
+                <h3>
+                  <MessageCircle size={19} style={iconStyle} />
+                  แชตกับ {selectedOwnerRoom.contact_name}
+                </h3>
 
                 {ownerChatLoading ? (
                   <p>กำลังโหลดข้อความ...</p>
@@ -683,6 +734,7 @@ export default function App() {
                           </strong>
                           <p>{message.message}</p>
                           <small>
+                            <Clock size={13} style={iconStyle} />
                             {new Date(message.created_at).toLocaleString("th-TH")}
                           </small>
                         </article>
@@ -700,7 +752,10 @@ export default function App() {
                     maxLength={2000}
                     placeholder="พิมพ์ข้อความ..."
                   />
-                  <button type="submit">ส่งข้อความ</button>
+                  <button type="submit">
+                    <MessageCircle size={17} style={iconStyle} />
+                    ส่งข้อความ
+                  </button>
                   <button
                     type="button"
                     onClick={() => openOwnerRoom(selectedOwnerRoom)}
@@ -730,14 +785,30 @@ export default function App() {
       </section>
 
       <section className="items-section">
-        <h2>รายการประกาศ</h2>
+        <h2>
+          <PackageCheck size={23} style={iconStyle} />
+          รายการประกาศ
+        </h2>
 
-        <input
-          className="search-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="ค้นหาชื่อสิ่งของ รายละเอียด หรือสถานที่..."
-        />
+        <div style={{ position: "relative" }}>
+          <Search
+            size={19}
+            style={{
+              position: "absolute",
+              left: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#777",
+            }}
+          />
+          <input
+            className="search-input"
+            style={{ paddingLeft: "40px" }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ค้นหาชื่อสิ่งของ รายละเอียด หรือสถานที่..."
+          />
+        </div>
 
         <div className="filters">
           <select
@@ -775,6 +846,11 @@ export default function App() {
                       {item.type === "lost" ? "ของหาย" : "พบของ"}
                     </span>
                     <span className="status-tag">
+                      {item.status === "found" ? (
+                        <CheckCircle size={14} style={iconStyle} />
+                      ) : (
+                        <Clock size={14} style={iconStyle} />
+                      )}
                       {statusLabels[item.status] || item.status}
                     </span>
                   </div>
@@ -782,9 +858,11 @@ export default function App() {
                   <h3>{item.title}</h3>
                   <p>{item.description || "ไม่มีรายละเอียด"}</p>
                   <p>
+                    <MapPin size={15} style={iconStyle} />
                     <strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}
                   </p>
                   <small>
+                    <Clock size={13} style={iconStyle} />
                     วันที่ลงประกาศ:{" "}
                     {new Date(item.created_at).toLocaleString("th-TH")}
                   </small>
@@ -807,12 +885,16 @@ export default function App() {
                       setContactMessage("");
                     }}
                   >
+                    <MessageCircle size={17} style={iconStyle} />
                     ติดต่อผ่านเว็บไซต์
                   </button>
 
                   {openContactId === item.id && (
                     <div className="contact-form">
-                      <label>ชื่อผู้ติดต่อ (ไม่บังคับ)</label>
+                      <label>
+                        <UserRound size={15} style={iconStyle} />
+                        ชื่อผู้ติดต่อ (ไม่บังคับ)
+                      </label>
                       <input
                         value={contactName}
                         onChange={(e) => setContactName(e.target.value)}
@@ -834,6 +916,7 @@ export default function App() {
                         disabled={saving}
                         onClick={() => createChatRoom(item.id)}
                       >
+                        <MessageCircle size={17} style={iconStyle} />
                         {saving ? "กำลังสร้างห้องแชต..." : "เริ่มแชตส่วนตัว"}
                       </button>
                     </div>
@@ -845,6 +928,7 @@ export default function App() {
       </section>
 
       <footer className="site-footer">
+        <Home size={16} style={iconStyle} />
         School Lost &amp; Found
       </footer>
     </main>
