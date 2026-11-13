@@ -10,10 +10,15 @@ const statusLabels = {
 };
 
 function makeToken() {
-  const bytes = new Uint8Array(32);
+  const characters =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+  const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, "0")
+
+  return Array.from(
+    bytes,
+    (byte) => characters[byte % characters.length]
   ).join("");
 }
 
