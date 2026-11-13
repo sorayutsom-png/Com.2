@@ -422,72 +422,74 @@ export default function App() {
 
         {loading ? (
           <p>กำลังโหลดประกาศ...</p>
-        ) : filteredItems.length === 0 ? (
+        ) : filteredItems.filter((item) => item.status !== "returned").length === 0 ? (
           <p>ไม่พบประกาศที่ค้นหา</p>
         ) : (
           <div className="item-grid">
-            {filteredItems.map((item) => (
-              <article className="item-card" key={item.id}>
-                <div className="item-tags">
-                  <span className={item.type === "lost" ? "lost-tag" : "found-tag"}>
-                    {item.type === "lost" ? "ของหาย" : "พบของ"}
-                  </span>
-                  <span className="status-tag">
-                    {statusLabels[item.status] || item.status}
-                  </span>
-                </div>
-
-                <h3>{item.title}</h3>
-                <p>{item.description || "ไม่มีรายละเอียด"}</p>
-                <p><strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}</p>
-                <small>วันที่ลงประกาศ: {new Date(item.created_at).toLocaleString("th-TH")}</small>
-
-                {item.image_urls?.length > 0 && (
-                  <div className="item-images">
-                    {item.image_urls.map((url, index) => (
-                      <a href={url} target="_blank" rel="noreferrer" key={index}>
-                        <img src={url} alt={`รูปประกาศ ${index + 1}`} />
-                      </a>
-                    ))}
+            {filteredItems
+              .filter((item) => item.status !== "returned")
+              .map((item) => (
+                <article className="item-card" key={item.id}>
+                  <div className="item-tags">
+                    <span className={item.type === "lost" ? "lost-tag" : "found-tag"}>
+                      {item.type === "lost" ? "ของหาย" : "พบของ"}
+                    </span>
+                    <span className="status-tag">
+                      {statusLabels[item.status] || item.status}
+                    </span>
                   </div>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenContactId(openContactId === item.id ? null : item.id);
-                    setContactName("");
-                    setContactMessage("");
-                  }}
-                >
-                  ติดต่อผ่านเว็บไซต์
-                </button>
+                  <h3>{item.title}</h3>
+                  <p>{item.description || "ไม่มีรายละเอียด"}</p>
+                  <p><strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}</p>
+                  <small>วันที่ลงประกาศ: {new Date(item.created_at).toLocaleString("th-TH")}</small>
 
-                {openContactId === item.id && (
-                  <div className="contact-form">
-                    <label>ชื่อผู้ส่ง (ไม่บังคับ)</label>
-                    <input
-                      value={contactName}
-                      onChange={(e) => setContactName(e.target.value)}
-                      placeholder="ระบุชื่อหรือเว้นว่างได้"
-                    />
+                  {item.image_urls?.length > 0 && (
+                    <div className="item-images">
+                      {item.image_urls.map((url, index) => (
+                        <a href={url} target="_blank" rel="noreferrer" key={index}>
+                          <img src={url} alt={`รูปประกาศ ${index + 1}`} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
 
-                    <label>ข้อความ</label>
-                    <textarea
-                      value={contactMessage}
-                      onChange={(e) => setContactMessage(e.target.value)}
-                      placeholder="พิมพ์ข้อความถึงผู้แจ้งประกาศ"
-                      rows={3}
-                      maxLength={1000}
-                    />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenContactId(openContactId === item.id ? null : item.id);
+                      setContactName("");
+                      setContactMessage("");
+                    }}
+                  >
+                    ติดต่อผ่านเว็บไซต์
+                  </button>
 
-                    <button type="button" onClick={() => sendMessage(item.id)}>
-                      ส่งข้อความ
-                    </button>
-                  </div>
-                )}
-              </article>
-            ))}
+                  {openContactId === item.id && (
+                    <div className="contact-form">
+                      <label>ชื่อผู้ส่ง (ไม่บังคับ)</label>
+                      <input
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        placeholder="ระบุชื่อหรือเว้นว่างได้"
+                      />
+
+                      <label>ข้อความ</label>
+                      <textarea
+                        value={contactMessage}
+                        onChange={(e) => setContactMessage(e.target.value)}
+                        placeholder="พิมพ์ข้อความถึงผู้แจ้งประกาศ"
+                        rows={3}
+                        maxLength={1000}
+                      />
+
+                      <button type="button" onClick={() => sendMessage(item.id)}>
+                        ส่งข้อความ
+                      </button>
+                    </div>
+                  )}
+                </article>
+              ))}
           </div>
         )}
       </section>
