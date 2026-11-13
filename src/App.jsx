@@ -231,7 +231,6 @@ export default function App() {
       setContactToken(token);
       setContactChatMessages(data || []);
 
-      // ทำเครื่องหมายว่าอ่านข้อความแล้ว
       const { error: readError } = await supabase.rpc(
         "mark_contact_chat_read",
         {
@@ -262,7 +261,7 @@ export default function App() {
     const chats = readStorage(CONTACT_STORAGE);
     const counts = {};
 
-    const results = await Promise.all(
+    await Promise.all(
       chats.map(async (room) => {
         try {
           const { data, error } = await supabase.rpc(
@@ -357,6 +356,19 @@ export default function App() {
     statusFilter,
     categoryFilter,
   ]);
+
+  // ------------------------------
+  // สถิติประกาศ
+  // ------------------------------
+
+  const statistics = useMemo(() => {
+    return {
+      lost: items.filter((item) => item.type === "lost").length,
+      found: items.filter((item) => item.type === "found").length,
+      returned: items.filter((item) => item.status === "returned").length,
+      total: items.length,
+    };
+  }, [items]);
 
   // ------------------------------
   // จัดการรูปภาพ
@@ -1047,6 +1059,137 @@ export default function App() {
           )}
         </button>
       </header>
+
+      {/* แดชบอร์ดสถิติ */}
+
+      {!chatView && (
+        <section
+          style={{
+            margin: "24px 0",
+            padding: "22px",
+            background: "#ffffff",
+            border: "1px solid #e5e7eb",
+            borderRadius: "16px",
+          }}
+        >
+          <h2 style={{ color: "#142b4a", marginTop: 0 }}>
+            <PackageCheck size={22} style={iconStyle} />
+            สถิติการแจ้งของหายและพบของ
+          </h2>
+
+          <p style={{ color: "#64748b", marginTop: "-5px" }}>
+            สรุปข้อมูลประกาศทั้งหมดในระบบ
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px",
+                borderRadius: "12px",
+                background: "#eff6ff",
+                border: "1px solid #dbeafe",
+              }}
+            >
+              <div style={{ color: "#1d4ed8", fontSize: "14px" }}>
+                แจ้งของหาย
+              </div>
+              <strong
+                style={{
+                  display: "block",
+                  fontSize: "34px",
+                  color: "#1d4ed8",
+                  marginTop: "6px",
+                }}
+              >
+                {loading ? "..." : statistics.lost}
+              </strong>
+              <small>รายการ</small>
+            </div>
+
+            <div
+              style={{
+                padding: "18px",
+                borderRadius: "12px",
+                background: "#f0fdf4",
+                border: "1px solid #dcfce7",
+              }}
+            >
+              <div style={{ color: "#15803d", fontSize: "14px" }}>
+                แจ้งพบของ
+              </div>
+              <strong
+                style={{
+                  display: "block",
+                  fontSize: "34px",
+                  color: "#15803d",
+                  marginTop: "6px",
+                }}
+              >
+                {loading ? "..." : statistics.found}
+              </strong>
+              <small>รายการ</small>
+            </div>
+
+            <div
+              style={{
+                padding: "18px",
+                borderRadius: "12px",
+                background: "#faf5ff",
+                border: "1px solid #f3e8ff",
+              }}
+            >
+              <div style={{ color: "#7e22ce", fontSize: "14px" }}>
+                ส่งคืนเจ้าของแล้ว
+              </div>
+              <strong
+                style={{
+                  display: "block",
+                  fontSize: "34px",
+                  color: "#7e22ce",
+                  marginTop: "6px",
+                }}
+              >
+                {loading ? "..." : statistics.returned}
+              </strong>
+              <small>รายการ</small>
+            </div>
+
+            <div
+              style={{
+                padding: "18px",
+                borderRadius: "12px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ color: "#334155", fontSize: "14px" }}>
+                ประกาศทั้งหมด
+              </div>
+              <strong
+                style={{
+                  display: "block",
+                  fontSize: "34px",
+                  color: "#142b4a",
+                  marginTop: "6px",
+                }}
+              >
+                {loading ? "..." : statistics.total}
+              </strong>
+              <small>รายการ</small>
+            </div>
+          </div>
+
+          <p style={{ fontSize: "12px", color: "#64748b", marginBottom: 0 }}>
+            * จำนวนประกาศทั้งหมดรวมรายการที่ส่งคืนเจ้าของแล้ว
+          </p>
+        </section>
+      )}
 
       {/* กล่องข้อความ */}
 

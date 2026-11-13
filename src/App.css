@@ -562,4 +562,76 @@ form button[type="submit"],
   .site-header h1 {
     font-size: 25px;
   }
+}/* Statistics Dashboard */
+
+.stats-section {
+  margin: 25px 0;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.stats-section h2 {
+  color: #142b4a;
+  margin-bottom: 20px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.stat-card {
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.stat-card span {
+  font-size: 14px;
+  color: #475569;
+}
+
+.stat-card strong {
+  font-size: 36px;
+  color: #142b4a;
+}
+
+.stat-card small {
+  color: #64748b;
+}
+
+.stat-lost {
+  background: #eff6ff;
+}
+
+.stat-found {
+  background: #f0fdf4;
+}
+
+.stat-returned {
+  background: #faf5ff;
+}
+
+.stat-total {
+  background: #f8fafc;
+}
+
+@media (max-width: 700px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat-card {
+    padding: 15px;
+  }
+
+  .stat-card strong {
+    font-size: 29px;
+  }
 }
