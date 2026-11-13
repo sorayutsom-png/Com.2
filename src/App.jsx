@@ -12,7 +12,9 @@ const statusLabels = {
 function makeToken() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 export default function App() {
@@ -41,6 +43,21 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [manageLoaded, setManageLoaded] = useState(false);
 
+  // ระบบแชตของผู้ติดต่อ
+  const [contactRoomId, setContactRoomId] = useState("");
+  const [contactToken, setContactToken] = useState("");
+  const [contactChatMessages, setContactChatMessages] = useState([]);
+  const [contactReply, setContactReply] = useState("");
+  const [contactChatLoading, setContactChatLoading] = useState(false);
+  const [createdChatLink, setCreatedChatLink] = useState("");
+
+  // ระบบแชตของเจ้าของประกาศ
+  const [ownerRooms, setOwnerRooms] = useState([]);
+  const [selectedOwnerRoom, setSelectedOwnerRoom] = useState(null);
+  const [ownerChatMessages, setOwnerChatMessages] = useState([]);
+  const [ownerReply, setOwnerReply] = useState("");
+  const [ownerChatLoading, setOwnerChatLoading] = useState(false);
+
   async function fetchItems() {
     setLoading(true);
 
@@ -58,8 +75,44 @@ export default function App() {
     setLoading(false);
   }
 
+  // โหลดแชตของผู้ติดต่อจากลิงก์ส่วนตัว
+  async function loadContactChat(roomId, token) {
+    setContactChatLoading(true);
+
+    const { data, error } = await supabase.rpc(
+      "get_private_chat_messages",
+      {
+        p_room_id: roomId,
+        p_contact_token: token,
+      }
+    );
+
+    if (error) {
+      alert("เปิดห้องแชตไม่สำเร็จ ลิงก์อาจไม่ถูกต้อง");
+      setContactChatMessages([]);
+    } else {
+      setContactChatMessages(data || []);
+    }
+
+    setContactChatLoading(false);
+  }
+
   useEffect(() => {
     fetchItems();
+
+    // ตรวจสอบว่ามีลิงก์แชตส่วนตัวหรือไม่
+    const params = new URLSearchParams(
+      window.location.hash.slice(1)
+    );
+
+    const roomId = params.get("chat");
+    const token = params.get("key");
+
+    if (roomId && token) {
+      setContactRoomId(roomId);
+      setContactToken(token);
+      loadContactChat(roomId, token);
+    }
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -128,7 +181,9 @@ export default function App() {
       const imageUrls = [];
 
       for (const file of images) {
-        const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const extension =
+          file.name.split(".").pop()?.toLowerCase() || "jpg";
+
         const path = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
         const { error: uploadError } = await supabase.storage
@@ -178,29 +233,79 @@ export default function App() {
     }
   }
 
-  async function sendMessage(itemId) {
+  // สร้างห้องแชตใหม่
+  async function createChatRoom(itemId) {
     if (!contactMessage.trim()) {
       alert("กรุณาพิมพ์ข้อความ");
       return;
     }
 
-    const { error } = await supabase.rpc("send_contact_message", {
-      p_item_id: itemId,
-      p_sender_name: contactName.trim(),
-      p_message: contactMessage.trim(),
-    });
+    setSaving(true);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "create_private_chat_room",
+        {
+          p_item_id: itemId,
+          p_contact_name: contactName.trim() || "ผู้ติดต่อ",
+          p_message: contactMessage.trim(),
+        }
+      );
+
+      if (error) throw error;
+
+      const roomId = data.room_id;
+      const token = data.contact_token;
+
+      const link =
+        `${window.location.origin}${window.location.pathname}` +
+        `#chat=${encodeURIComponent(roomId)}` +
+        `&key=${encodeURIComponent(token)}`;
+
+      setCreatedChatLink(link);
+      setContactRoomId(roomId);
+      setContactToken(token);
+      setContactMessage("");
+      setContactName("");
+      setOpenContactId(null);
+
+      window.history.replaceState(null, "", link);
+
+      await loadContactChat(roomId, token);
+
+      alert("สร้างห้องแชตเรียบร้อยแล้ว กรุณาคัดลอกลิงก์เก็บไว้");
+    } catch (error) {
+      alert("สร้างห้องแชตไม่สำเร็จ: " + error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ผู้ติดต่อส่งข้อความ
+  async function sendContactReply(event) {
+    event.preventDefault();
+
+    if (!contactReply.trim()) return;
+
+    const { error } = await supabase.rpc(
+      "send_private_chat_message_contact",
+      {
+        p_room_id: contactRoomId,
+        p_contact_token: contactToken,
+        p_message: contactReply.trim(),
+      }
+    );
 
     if (error) {
       alert("ส่งข้อความไม่สำเร็จ: " + error.message);
       return;
     }
 
-    alert("ส่งข้อความเรียบร้อยแล้ว");
-    setContactName("");
-    setContactMessage("");
-    setOpenContactId(null);
+    setContactReply("");
+    await loadContactChat(contactRoomId, contactToken);
   }
 
+  // เจ้าของเปิดข้อมูลประกาศและรายการห้องแชต
   async function loadManageMessages(event) {
     event.preventDefault();
 
@@ -209,21 +314,87 @@ export default function App() {
       return;
     }
 
-    const { data, error } = await supabase.rpc("get_contact_messages", {
-      p_item_id: Number(manageId),
-      p_manage_token: manageToken.trim(),
-    });
+    const itemId = Number(manageId);
 
-    if (error) {
+    const { data: oldMessages, error: oldError } =
+      await supabase.rpc("get_contact_messages", {
+        p_item_id: itemId,
+        p_manage_token: manageToken.trim(),
+      });
+
+    if (oldError) {
       alert("เปิดข้อมูลไม่สำเร็จ ตรวจสอบรหัสอีกครั้ง");
       setManageLoaded(false);
       return;
     }
 
-    const item = items.find((entry) => entry.id === Number(manageId));
+    const { data: rooms, error: roomsError } =
+      await supabase.rpc("owner_list_private_chat_rooms", {
+        p_item_id: itemId,
+        p_manage_token: manageToken.trim(),
+      });
+
+    if (roomsError) {
+      alert("โหลดห้องแชตไม่สำเร็จ: " + roomsError.message);
+      setManageLoaded(false);
+      return;
+    }
+
+    const item = items.find((entry) => entry.id === itemId);
+
     setManageStatus(item?.status || "searching");
-    setMessages(data || []);
+    setMessages(oldMessages || []);
+    setOwnerRooms(rooms || []);
+    setSelectedOwnerRoom(null);
+    setOwnerChatMessages([]);
     setManageLoaded(true);
+  }
+
+  // เจ้าของเปิดห้องแชตของผู้ติดต่อ
+  async function openOwnerRoom(room) {
+    setSelectedOwnerRoom(room);
+    setOwnerChatLoading(true);
+
+    const { data, error } = await supabase.rpc(
+      "owner_get_private_chat_messages",
+      {
+        p_room_id: room.room_id,
+        p_manage_token: manageToken.trim(),
+      }
+    );
+
+    if (error) {
+      alert("เปิดห้องแชตไม่สำเร็จ: " + error.message);
+      setOwnerChatMessages([]);
+    } else {
+      setOwnerChatMessages(data || []);
+    }
+
+    setOwnerChatLoading(false);
+  }
+
+  // เจ้าของตอบข้อความ
+  async function sendOwnerReply(event) {
+    event.preventDefault();
+
+    if (!ownerReply.trim() || !selectedOwnerRoom) return;
+
+    const { error } = await supabase.rpc(
+      "owner_send_private_chat_message",
+      {
+        p_room_id: selectedOwnerRoom.room_id,
+        p_manage_token: manageToken.trim(),
+        p_message: ownerReply.trim(),
+      }
+    );
+
+    if (error) {
+      alert("ส่งข้อความไม่สำเร็จ: " + error.message);
+      return;
+    }
+
+    setOwnerReply("");
+    await openOwnerRoom(selectedOwnerRoom);
   }
 
   async function changeStatus(event) {
@@ -254,6 +425,17 @@ export default function App() {
       alert("คัดลอกรหัสแล้ว กรุณาเก็บไว้ให้ดี");
     } catch {
       alert("ไม่สามารถคัดลอกได้ กรุณาจดรหัสเก็บไว้");
+    }
+  }
+
+  async function copyChatLink() {
+    if (!createdChatLink) return;
+
+    try {
+      await navigator.clipboard.writeText(createdChatLink);
+      alert("คัดลอกลิงก์แชตแล้ว กรุณาเก็บไว้");
+    } catch {
+      alert("คัดลอกไม่ได้ กรุณาคัดลอกลิงก์ด้วยตนเอง");
     }
   }
 
@@ -319,7 +501,9 @@ export default function App() {
             </div>
           )}
 
-          <p className="hint">ห้ามใส่ข้อมูลส่วนตัวหรือภาพบัตรนักเรียนในประกาศ</p>
+          <p className="hint">
+            ห้ามใส่ข้อมูลส่วนตัวหรือภาพบัตรนักเรียนในประกาศ
+          </p>
 
           <button className="primary-button" disabled={saving}>
             {saving ? "กำลังลงประกาศ..." : "ลงประกาศ"}
@@ -330,15 +514,88 @@ export default function App() {
       {createdSecret && (
         <section className="secret-box">
           <h2>ประกาศสำเร็จ!</h2>
-          <p>เก็บรหัสทั้งสองรายการนี้ไว้ เพื่อเปลี่ยนสถานะและอ่านข้อความในภายหลัง</p>
+          <p>เก็บรหัสทั้งสองรายการนี้ไว้ เพื่อจัดการประกาศในภายหลัง</p>
           <p><strong>รหัสประกาศ:</strong> {createdSecret.id}</p>
           <p className="token-text">
             <strong>รหัสจัดการ:</strong> {createdSecret.token}
           </p>
-          <button type="button" onClick={copyToken}>คัดลอกรหัสเก็บไว้</button>
+          <button type="button" onClick={copyToken}>
+            คัดลอกรหัสเก็บไว้
+          </button>
           <button type="button" onClick={() => setCreatedSecret(null)}>
             ปิด
           </button>
+        </section>
+      )}
+
+      {createdChatLink && (
+        <section className="secret-box">
+          <h2>สร้างห้องแชตสำเร็จ!</h2>
+          <p>คัดลอกลิงก์นี้เก็บไว้ เพื่อกลับมาอ่านข้อความและตอบกลับภายหลัง</p>
+          <input
+            value={createdChatLink}
+            readOnly
+            onFocus={(e) => e.target.select()}
+          />
+          <button type="button" onClick={copyChatLink}>
+            คัดลอกลิงก์แชต
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreatedChatLink("")}
+          >
+            ปิด
+          </button>
+        </section>
+      )}
+
+      {/* หน้าห้องแชตของผู้ติดต่อ */}
+      {contactRoomId && (
+        <section className="manage-section">
+          <h2>แชตส่วนตัวของคุณ</h2>
+          <p>ห้องสนทนานี้เป็นส่วนตัว กรุณาเก็บลิงก์ไว้</p>
+
+          {contactChatLoading ? (
+            <p>กำลังโหลดข้อความ...</p>
+          ) : (
+            <div className="chat-messages">
+              {contactChatMessages.length === 0 ? (
+                <p>ยังไม่มีข้อความ</p>
+              ) : (
+                contactChatMessages.map((message) => (
+                  <article className="message-card" key={message.id}>
+                    <strong>
+                      {message.sender_role === "owner"
+                        ? "เจ้าของประกาศ"
+                        : "คุณ"}
+                    </strong>
+                    <p>{message.message}</p>
+                    <small>
+                      {new Date(message.created_at).toLocaleString("th-TH")}
+                    </small>
+                  </article>
+                ))
+              )}
+            </div>
+          )}
+
+          <form onSubmit={sendContactReply}>
+            <label>พิมพ์ข้อความตอบกลับ</label>
+            <textarea
+              value={contactReply}
+              onChange={(e) => setContactReply(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="พิมพ์ข้อความ..."
+            />
+            <button type="submit">ส่งข้อความ</button>
+            <button
+              type="button"
+              onClick={() => loadContactChat(contactRoomId, contactToken)}
+            >
+              โหลดข้อความใหม่
+            </button>
+          </form>
         </section>
       )}
 
@@ -379,15 +636,87 @@ export default function App() {
               <button type="submit">บันทึกสถานะ</button>
             </form>
 
-            <h3>ข้อความที่ได้รับ</h3>
+            <h3>ห้องแชตส่วนตัว ({ownerRooms.length})</h3>
+
+            {ownerRooms.length === 0 ? (
+              <p>ยังไม่มีห้องแชต</p>
+            ) : (
+              ownerRooms.map((room) => (
+                <article className="message-card" key={room.room_id}>
+                  <strong>{room.contact_name}</strong>
+                  <p>
+                    อัปเดตล่าสุด:{" "}
+                    {new Date(room.last_message_at).toLocaleString("th-TH")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openOwnerRoom(room)}
+                  >
+                    เปิดห้องแชต
+                  </button>
+                </article>
+              ))
+            )}
+
+            {selectedOwnerRoom && (
+              <div className="owner-chat">
+                <h3>แชตกับ {selectedOwnerRoom.contact_name}</h3>
+
+                {ownerChatLoading ? (
+                  <p>กำลังโหลดข้อความ...</p>
+                ) : (
+                  <div className="chat-messages">
+                    {ownerChatMessages.length === 0 ? (
+                      <p>ยังไม่มีข้อความ</p>
+                    ) : (
+                      ownerChatMessages.map((message) => (
+                        <article className="message-card" key={message.id}>
+                          <strong>
+                            {message.sender_role === "owner"
+                              ? "คุณ (เจ้าของประกาศ)"
+                              : selectedOwnerRoom.contact_name}
+                          </strong>
+                          <p>{message.message}</p>
+                          <small>
+                            {new Date(message.created_at).toLocaleString("th-TH")}
+                          </small>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={sendOwnerReply}>
+                  <label>ตอบกลับผู้ติดต่อ</label>
+                  <textarea
+                    value={ownerReply}
+                    onChange={(e) => setOwnerReply(e.target.value)}
+                    rows={3}
+                    maxLength={2000}
+                    placeholder="พิมพ์ข้อความ..."
+                  />
+                  <button type="submit">ส่งข้อความ</button>
+                  <button
+                    type="button"
+                    onClick={() => openOwnerRoom(selectedOwnerRoom)}
+                  >
+                    โหลดข้อความใหม่
+                  </button>
+                </form>
+              </div>
+            )}
+
+            <h3>ข้อความจากระบบเดิม</h3>
             {messages.length === 0 ? (
-              <p>ยังไม่มีข้อความ</p>
+              <p>ยังไม่มีข้อความเดิม</p>
             ) : (
               messages.map((message) => (
                 <article className="message-card" key={message.id}>
                   <strong>{message.sender_name || "ผู้ไม่ระบุชื่อ"}</strong>
                   <p>{message.message}</p>
-                  <small>{new Date(message.created_at).toLocaleString("th-TH")}</small>
+                  <small>
+                    {new Date(message.created_at).toLocaleString("th-TH")}
+                  </small>
                 </article>
               ))
             )}
@@ -406,13 +735,19 @@ export default function App() {
         />
 
         <div className="filters">
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
             <option value="all">ประกาศทุกประเภท</option>
             <option value="lost">ของหาย</option>
             <option value="found">พบของ</option>
           </select>
 
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
             <option value="all">ทุกสถานะ</option>
             <option value="searching">กำลังตามหา</option>
             <option value="found">พบของแล้ว</option>
@@ -441,8 +776,13 @@ export default function App() {
 
                   <h3>{item.title}</h3>
                   <p>{item.description || "ไม่มีรายละเอียด"}</p>
-                  <p><strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}</p>
-                  <small>วันที่ลงประกาศ: {new Date(item.created_at).toLocaleString("th-TH")}</small>
+                  <p>
+                    <strong>สถานที่:</strong> {item.location || "ไม่ระบุ"}
+                  </p>
+                  <small>
+                    วันที่ลงประกาศ:{" "}
+                    {new Date(item.created_at).toLocaleString("th-TH")}
+                  </small>
 
                   {item.image_urls?.length > 0 && (
                     <div className="item-images">
@@ -467,11 +807,12 @@ export default function App() {
 
                   {openContactId === item.id && (
                     <div className="contact-form">
-                      <label>ชื่อผู้ส่ง (ไม่บังคับ)</label>
+                      <label>ชื่อผู้ติดต่อ (ไม่บังคับ)</label>
                       <input
                         value={contactName}
                         onChange={(e) => setContactName(e.target.value)}
                         placeholder="ระบุชื่อหรือเว้นว่างได้"
+                        maxLength={80}
                       />
 
                       <label>ข้อความ</label>
@@ -480,11 +821,15 @@ export default function App() {
                         onChange={(e) => setContactMessage(e.target.value)}
                         placeholder="พิมพ์ข้อความถึงผู้แจ้งประกาศ"
                         rows={3}
-                        maxLength={1000}
+                        maxLength={2000}
                       />
 
-                      <button type="button" onClick={() => sendMessage(item.id)}>
-                        ส่งข้อความ
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => createChatRoom(item.id)}
+                      >
+                        {saving ? "กำลังสร้างห้องแชต..." : "เริ่มแชตส่วนตัว"}
                       </button>
                     </div>
                   )}
