@@ -171,6 +171,9 @@ export default function App() {
   const [savedContactChats, setSavedContactChats] = useState([]);
   const [savedOwnerItems, setSavedOwnerItems] = useState([]);
 
+  // จำนวนข้อความที่ยังไม่อ่านของผู้ติดต่อ
+  const [contactUnreadCounts, setContactUnreadCounts] = useState({});
+
   // หน้ากล่องข้อความ
   const [chatView, setChatView] = useState(false);
   const [chatTab, setChatTab] = useState("contact");
@@ -204,10 +207,14 @@ export default function App() {
   // โหลดแชตผู้ติดต่อ
   // ------------------------------
 
-  async function loadContactChat(roomId, token) {
+  async function loadContactChat(roomId, token, options = {}) {
     if (!roomId || !token) return;
 
-    setContactChatLoading(true);
+    const silent = options.silent === true;
+
+    if (!silent) {
+      setContactChatLoading(true);
+    }
 
     try {
       const { data, error } = await supabase.rpc(
@@ -223,12 +230,63 @@ export default function App() {
       setContactRoomId(String(roomId));
       setContactToken(token);
       setContactChatMessages(data || []);
+
+      // ทำเครื่องหมายว่าอ่านข้อความแล้ว
+      const { error: readError } = await supabase.rpc(
+        "mark_contact_chat_read",
+        {
+          p_room_id: roomId,
+          p_contact_token: token,
+        }
+      );
+
+      if (readError) throw readError;
     } catch (error) {
-      alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
-      setContactChatMessages([]);
+      if (!silent) {
+        alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
+      }
+
+      console.error("โหลดแชตผู้ติดต่อไม่สำเร็จ:", error);
     } finally {
-      setContactChatLoading(false);
+      if (!silent) {
+        setContactChatLoading(false);
+      }
     }
+  }
+
+  // ------------------------------
+  // ตรวจสอบข้อความที่ยังไม่อ่านของผู้ติดต่อ
+  // ------------------------------
+
+  async function refreshContactUnreadCounts() {
+    const chats = readStorage(CONTACT_STORAGE);
+    const counts = {};
+
+    const results = await Promise.all(
+      chats.map(async (room) => {
+        try {
+          const { data, error } = await supabase.rpc(
+            "get_private_chat_messages_with_unread",
+            {
+              p_room_id: room.room_id,
+              p_contact_token: room.token,
+            }
+          );
+
+          if (error) throw error;
+
+          counts[room.room_id] =
+            Number(data?.[0]?.unread_count || 0);
+        } catch (error) {
+          console.warn(
+            "ตรวจสอบข้อความใหม่ไม่สำเร็จ:",
+            error.message
+          );
+        }
+      })
+    );
+
+    setContactUnreadCounts({ ...counts });
   }
 
   // ------------------------------
@@ -238,8 +296,11 @@ export default function App() {
   useEffect(() => {
     fetchItems();
 
-    setSavedContactChats(readStorage(CONTACT_STORAGE));
-    setSavedOwnerItems(readStorage(OWNER_STORAGE));
+    const contacts = readStorage(CONTACT_STORAGE);
+    const owners = readStorage(OWNER_STORAGE);
+
+    setSavedContactChats(contacts);
+    setSavedOwnerItems(owners);
 
     const params = new URLSearchParams(
       window.location.hash.slice(1)
@@ -279,7 +340,6 @@ export default function App() {
         categoryFilter === "all" ||
         (item.category || "other") === categoryFilter;
 
-      // ซ่อนประกาศที่ส่งคืนเจ้าของแล้วเสมอ
       const notReturned = item.status !== "returned";
 
       return (
@@ -304,6 +364,7 @@ export default function App() {
 
   function handleImageChange(event) {
     const selected = Array.from(event.target.files || []);
+
     const allowed = [
       "image/jpeg",
       "image/png",
@@ -616,7 +677,7 @@ export default function App() {
       if (oldError) throw oldError;
 
       const { data: rooms, error: roomsError } =
-        await supabase.rpc("owner_list_private_chat_rooms", {
+        await supabase.rpc("owner_list_private_chat_rooms_with_unread", {
           p_item_id: itemId,
           p_manage_token: manageToken.trim(),
         });
@@ -663,31 +724,35 @@ export default function App() {
     const owners = readStorage(OWNER_STORAGE);
     const allRooms = [];
 
-    for (const owner of owners) {
-      const { data, error } = await supabase.rpc(
-        "owner_list_private_chat_rooms",
-        {
-          p_item_id: Number(owner.item_id),
-          p_manage_token: owner.token,
-        }
-      );
-
-      if (error) {
-        console.warn(
-          "โหลดห้องแชตไม่สำเร็จ:",
-          error.message
+    const results = await Promise.all(
+      owners.map(async (owner) => {
+        const { data, error } = await supabase.rpc(
+          "owner_list_private_chat_rooms_with_unread",
+          {
+            p_item_id: Number(owner.item_id),
+            p_manage_token: owner.token,
+          }
         );
-        continue;
-      }
 
-      for (const room of data || []) {
-        allRooms.push({
+        if (error) {
+          console.warn(
+            "โหลดห้องแชตไม่สำเร็จ:",
+            error.message
+          );
+          return [];
+        }
+
+        return (data || []).map((room) => ({
           ...room,
           item_id: owner.item_id,
           item_title: owner.title,
           owner_token: owner.token,
-        });
-      }
+        }));
+      })
+    );
+
+    for (const rooms of results) {
+      allRooms.push(...rooms);
     }
 
     allRooms.sort(
@@ -703,10 +768,15 @@ export default function App() {
   // เปิดแชตเจ้าของประกาศ
   // ------------------------------
 
-  async function openOwnerRoom(room) {
+  async function openOwnerRoom(room, options = {}) {
+    const silent = options.silent === true;
+
     setSelectedOwnerRoom(room);
-    setOwnerChatLoading(true);
-    setOwnerReply("");
+
+    if (!silent) {
+      setOwnerChatLoading(true);
+      setOwnerReply("");
+    }
 
     const token = room.owner_token || manageToken.trim();
 
@@ -722,11 +792,28 @@ export default function App() {
       if (error) throw error;
 
       setOwnerChatMessages(data || []);
+
+      const { error: readError } = await supabase.rpc(
+        "mark_owner_chat_read",
+        {
+          p_room_id: room.room_id,
+          p_manage_token: token,
+        }
+      );
+
+      if (readError) throw readError;
+
+      await loadAllOwnerRooms();
     } catch (error) {
-      alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
-      setOwnerChatMessages([]);
+      if (!silent) {
+        alert("เปิดห้องแชตไม่สำเร็จ: " + getErrorMessage(error));
+      }
+
+      console.error("โหลดแชตเจ้าของไม่สำเร็จ:", error);
     } finally {
-      setOwnerChatLoading(false);
+      if (!silent) {
+        setOwnerChatLoading(false);
+      }
     }
   }
 
@@ -790,6 +877,77 @@ export default function App() {
   }
 
   // ------------------------------
+  // โหลดข้อความและแจ้งเตือนอัตโนมัติ
+  // ------------------------------
+
+  useEffect(() => {
+    if (!contactRoomId && !selectedOwnerRoom) return;
+
+    let running = false;
+
+    const timer = setInterval(async () => {
+      if (running) return;
+
+      running = true;
+
+      try {
+        if (contactRoomId && contactToken) {
+          await loadContactChat(contactRoomId, contactToken, {
+            silent: true,
+          });
+        }
+
+        if (selectedOwnerRoom) {
+          await openOwnerRoom(selectedOwnerRoom, {
+            silent: true,
+          });
+        }
+      } finally {
+        running = false;
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [
+    contactRoomId,
+    contactToken,
+    selectedOwnerRoom?.room_id,
+    selectedOwnerRoom?.owner_token,
+    manageToken,
+  ]);
+
+  // ------------------------------
+  // โหลดจำนวนข้อความที่ยังไม่อ่านอัตโนมัติ
+  // ------------------------------
+
+  useEffect(() => {
+    if (!chatView) return;
+
+    let running = false;
+
+    const refresh = async () => {
+      if (running) return;
+
+      running = true;
+
+      try {
+        await Promise.all([
+          refreshContactUnreadCounts(),
+          loadAllOwnerRooms(),
+        ]);
+      } finally {
+        running = false;
+      }
+    };
+
+    refresh();
+
+    const timer = setInterval(refresh, 5000);
+
+    return () => clearInterval(timer);
+  }, [chatView]);
+
+  // ------------------------------
   // คัดลอกรหัสและลิงก์
   // ------------------------------
 
@@ -831,7 +989,10 @@ export default function App() {
     setSelectedOwnerRoom(null);
     setOwnerChatMessages([]);
 
-    await loadAllOwnerRooms();
+    await Promise.all([
+      loadAllOwnerRooms(),
+      refreshContactUnreadCounts(),
+    ]);
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -945,6 +1106,22 @@ export default function App() {
 
                     <p>รหัสห้องแชต: {room.room_id}</p>
 
+                    {Number(contactUnreadCounts[room.room_id]) > 0 && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          background: "#dc2626",
+                          color: "#fff",
+                          padding: "4px 10px",
+                          borderRadius: "20px",
+                          fontSize: "13px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        ยังไม่อ่าน {contactUnreadCounts[room.room_id]} ข้อความ
+                      </span>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => openSavedContactChat(room)}
@@ -987,6 +1164,22 @@ export default function App() {
                       <Clock size={13} style={iconStyle} />
                       {formatDate(room.last_message_at)}
                     </small>
+
+                    {Number(room.unread_count) > 0 && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          background: "#dc2626",
+                          color: "#fff",
+                          padding: "4px 10px",
+                          borderRadius: "20px",
+                          fontSize: "13px",
+                          margin: "8px 0",
+                        }}
+                      >
+                        ยังไม่อ่าน {room.unread_count} ข้อความ
+                      </span>
+                    )}
 
                     <button
                       type="button"
@@ -1397,6 +1590,22 @@ export default function App() {
                       <p>
                         อัปเดตล่าสุด: {formatDate(room.last_message_at)}
                       </p>
+
+                      {Number(room.unread_count) > 0 && (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#dc2626",
+                            color: "#fff",
+                            padding: "4px 10px",
+                            borderRadius: "20px",
+                            fontSize: "13px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          ยังไม่อ่าน {room.unread_count} ข้อความ
+                        </span>
+                      )}
 
                       <button
                         type="button"
