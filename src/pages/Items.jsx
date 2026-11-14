@@ -37,6 +37,7 @@ function readContactChats() {
     const data = JSON.parse(
       localStorage.getItem(CONTACT_STORAGE) || "[]"
     );
+
     return Array.isArray(data) ? data : [];
   } catch {
     return [];
@@ -116,7 +117,10 @@ export default function ItemsPage() {
   }, [items, search, typeFilter, categoryFilter]);
 
   function openContactForm(itemId) {
-    setOpenContactId(openContactId === itemId ? null : itemId);
+    setOpenContactId(
+      openContactId === itemId ? null : itemId
+    );
+
     setContactName("");
     setContactMessage("");
     setContactError("");
@@ -153,7 +157,9 @@ export default function ItemsPage() {
       const token = result?.contact_token;
 
       if (!roomId || !token) {
-        throw new Error("ไม่พบรหัสห้องแชตหรือรหัสเข้าถึง");
+        throw new Error(
+          "ไม่พบรหัสห้องแชตหรือรหัสเข้าถึง"
+        );
       }
 
       const chatLink =
@@ -294,7 +300,7 @@ export default function ItemsPage() {
             <div className="item-list">
               {filteredItems.map((item) => (
                 <article className="item-card" key={item.id}>
-                  <div>
+                  <div className="item-tags">
                     <span
                       className={
                         item.type === "lost"
@@ -312,7 +318,9 @@ export default function ItemsPage() {
 
                   <h3>{item.title}</h3>
 
-                  <p>{item.description || "ไม่มีรายละเอียด"}</p>
+                  <p>
+                    {item.description || "ไม่มีรายละเอียด"}
+                  </p>
 
                   <p>
                     <MapPin size={15} />
@@ -327,20 +335,49 @@ export default function ItemsPage() {
                     )?.name || "อื่น ๆ"}
                   </p>
 
+                  {/* แสดงรูปภาพเต็มโดยไม่ต้องคลิก */}
+
                   {item.image_urls?.length > 0 && (
-                    <div className="item-images">
+                    <div
+                      className="item-images"
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "15px",
+                        width: "100%",
+                        margin: "15px 0",
+                      }}
+                    >
                       {item.image_urls.map((url, index) => (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
+                        <div
                           key={`${item.id}-${index}`}
+                          style={{
+                            width: "100%",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            background: "#f8f5ff",
+                            border: "1px solid #e9e1f5",
+                            borderRadius: "12px",
+                            overflow: "hidden",
+                            padding: "8px",
+                          }}
                         >
                           <img
                             src={url}
                             alt={`รูปประกาศ ${index + 1}`}
+                            loading="lazy"
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              maxWidth: "100%",
+                              height: "auto",
+                              maxHeight: "none",
+                              objectFit: "contain",
+                              borderRadius: "8px",
+                            }}
                           />
-                        </a>
+                        </div>
                       ))}
                     </div>
                   )}
