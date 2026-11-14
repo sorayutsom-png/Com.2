@@ -710,3 +710,33 @@ form button[type="submit"],
     grid-template-columns: 1fr;
   }
 }
+.item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.found-tag,
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.found-tag {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #16a34a;
+}
+
+.status-tag {
+  color: #7e22ce;
+  background: #faf5ff;
+  border-color: #9333ea;
+}
