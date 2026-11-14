@@ -28,7 +28,7 @@ const categories = [
 
 const statusLabels = {
   searching: "กำลังตามหา",
-  found: "พบของแล้ว",
+  found: "พบเจอของ",
   returned: "ส่งคืนเจ้าของแล้ว",
 };
 
