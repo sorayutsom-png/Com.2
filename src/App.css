@@ -776,4 +776,32 @@ form button[type="submit"],
   color: #7e22ce;
   background: #faf5ff;
   border-color: #9333ea;
+}.category-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 125px;
+  padding: 18px 10px;
+  color: #57456f;
+  background: linear-gradient(145deg, #ffffff, #faf7ff);
+  border: 1px solid #e9def7;
+  border-radius: 18px;
+  box-shadow: 0 5px 15px rgba(91, 42, 155, 0.05);
+  transition: all 0.25s ease;
+}
+
+/* ปุ่มที่ถูกเลือก */
+.category-button.active {
+  color: #ffffff;
+  background: linear-gradient(145deg, #8955c7, #7040a8);
+  border: 1px solid #7040a8;
+  box-shadow: 0 5px 15px rgba(91, 42, 155, 0.18);
+}
+
+/* เอฟเฟกต์เมื่อชี้เมาส์ */
+.category-button:hover {
+  border-color: #8955c7;
+  transform: translateY(-3px);
 }
