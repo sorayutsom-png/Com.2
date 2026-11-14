@@ -335,53 +335,27 @@ export default function ItemsPage() {
                     )?.name || "อื่น ๆ"}
                   </p>
 
-                  {/* แสดงรูปภาพเต็มโดยไม่ต้องคลิก */}
+                 {/* แสดงรูปภาพแบบ Gallery */}
 
-                  {item.image_urls?.length > 0 && (
-                    <div
-                      className="item-images"
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "15px",
-                        width: "100%",
-                        margin: "15px 0",
-                      }}
-                    >
-                      {item.image_urls.map((url, index) => (
-                        <div
-                          key={`${item.id}-${index}`}
-                          style={{
-                            width: "100%",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            background: "#f8f5ff",
-                            border: "1px solid #e9e1f5",
-                            borderRadius: "12px",
-                            overflow: "hidden",
-                            padding: "8px",
-                          }}
-                        >
-                          <img
-                            src={url}
-                            alt={`รูปประกาศ ${index + 1}`}
-                            loading="lazy"
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              maxWidth: "100%",
-                              height: "auto",
-                              maxHeight: "none",
-                              objectFit: "contain",
-                              borderRadius: "8px",
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
+{item.image_urls?.length > 0 && (
+  <div className="item-images">
+    {item.image_urls.map((url, index) => (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        key={`${item.id}-${index}`}
+        className="item-image-link"
+      >
+        <img
+          src={url}
+          alt={`รูปประกาศ ${index + 1}`}
+          loading="lazy"
+        />
+      </a>
+    ))}
+  </div>
+)}
                   <button
                     type="button"
                     onClick={() => openContactForm(item.id)}
