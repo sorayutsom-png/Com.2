@@ -9,6 +9,8 @@ export default function AdminDashboard() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   // ระบบค้นหาและกรอง
   const [search, setSearch] = useState("");
@@ -116,6 +118,52 @@ export default function AdminDashboard() {
     navigate("/admin", { replace: true });
   }
 
+  // ลบประกาศ
+  async function handleDelete(item) {
+    const confirmed = window.confirm(
+      `คุณต้องการลบประกาศ "${item.title}" ใช่หรือไม่?\n\n` +
+      "การลบนี้ไม่สามารถย้อนกลับได้"
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(item.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const { data, error: deleteError } = await supabase.rpc(
+        "admin_delete_item",
+        {
+          p_item_id: item.id,
+        }
+      );
+
+      if (deleteError) throw deleteError;
+
+      if (!data?.deleted) {
+        if (data?.reason === "not_found") {
+          throw new Error("ไม่พบประกาศนี้ อาจถูกลบไปแล้ว");
+        }
+
+        throw new Error("ไม่สามารถลบประกาศได้");
+      }
+
+      // นำรายการที่ลบออกจากหน้าจอทันที
+      setItems((currentItems) =>
+        currentItems.filter(
+          (currentItem) => currentItem.id !== item.id
+        )
+      );
+
+      setNotice(`ลบประกาศ "${item.title}" เรียบร้อยแล้ว`);
+    } catch (err) {
+      setError(err.message || "ลบประกาศไม่สำเร็จ");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // สถิติประกาศ
   const statistics = useMemo(() => {
     return {
@@ -210,7 +258,7 @@ export default function AdminDashboard() {
         >
           <h2>จัดการรายการประกาศ</h2>
 
-          <button onClick={fetchItems} disabled={loading}>
+          <button onClick={fetchItems} disabled={loading || deletingId !== null}>
             {loading ? "กำลังโหลด..." : "โหลดข้อมูลใหม่"}
           </button>
         </div>
@@ -272,6 +320,12 @@ export default function AdminDashboard() {
           จากทั้งหมด {items.length} รายการ
         </p>
 
+        {notice && (
+          <p role="status" style={{ color: "green" }}>
+            {notice}
+          </p>
+        )}
+
         {loading && <p>กำลังโหลดข้อมูล...</p>}
 
         {error && (
@@ -284,7 +338,7 @@ export default function AdminDashboard() {
           <p>ไม่พบประกาศที่ตรงกับการค้นหา</p>
         )}
 
-        {!loading && !error && filteredItems.map((item) => (
+        {!loading && filteredItems.map((item) => (
           <article
             key={item.id}
             className="manage-result"
@@ -325,6 +379,21 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => handleDelete(item)}
+              disabled={deletingId !== null}
+              style={{
+                backgroundColor: "#dc2626",
+                color: "white",
+                marginTop: "12px",
+                opacity: deletingId === item.id ? 0.7 : 1,
+                cursor: deletingId !== null ? "not-allowed" : "pointer",
+              }}
+            >
+              {deletingId === item.id ? "กำลังลบ..." : "ลบประกาศ"}
+            </button>
           </article>
         ))}
       </section>
