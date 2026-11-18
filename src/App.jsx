@@ -6,6 +6,8 @@ import ReportPage from "./pages/Report";
 import ItemsPage from "./pages/Items";
 import MessagesPage from "./pages/Messages";
 import ChatPage from "./pages/Chat";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
@@ -62,7 +64,7 @@ function ManagePage() {
     } catch (error) {
       setErrorMessage(
         "เปิดข้อมูลไม่สำเร็จ: " +
-        (error.message || "กรุณาตรวจสอบรหัส")
+          (error.message || "กรุณาตรวจสอบรหัส")
       );
     } finally {
       setLoading(false);
@@ -94,7 +96,7 @@ function ManagePage() {
     } catch (error) {
       setErrorMessage(
         "เปลี่ยนสถานะไม่สำเร็จ: " +
-        (error.message || "เกิดข้อผิดพลาด")
+          (error.message || "เกิดข้อผิดพลาด")
       );
     } finally {
       setSaving(false);
@@ -197,6 +199,10 @@ export default function App() {
       <Route path="/manage" element={<ManagePage />} />
       <Route path="/messages" element={<MessagesPage />} />
       <Route path="/chat" element={<ChatPage />} />
+
+      {/* Admin System */}
+      <Route path="/admin" element={<AdminLogin />} />
+      <Route path="/admin/dashboard" element={<AdminDashboard />} />
     </Routes>
   );
 }
