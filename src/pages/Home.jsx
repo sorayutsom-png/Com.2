@@ -14,6 +14,9 @@ import {
   ArrowRight,
   Sparkles,
   BookOpen,
+  Menu,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
@@ -91,6 +94,7 @@ export default function HomePage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -204,6 +208,7 @@ export default function HomePage() {
       <header
         className="site-header"
         style={{
+          position: "relative",
           borderRadius: "22px",
           padding: "22px",
           background: "linear-gradient(120deg, #7C3AED, #A78BFA)",
@@ -218,7 +223,75 @@ export default function HomePage() {
         <p style={{ color: "#F3E8FF", marginBottom: 0 }}>
           ระบบแจ้งของหายและของที่พบภายในโรงเรียน
         </p>
+
+        {/* ปุ่มสามขีด */}
+        <button
+          type="button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="เปิดเมนูแอดมิน"
+          aria-expanded={menuOpen}
+          style={{
+            position: "absolute",
+            top: "22px",
+            right: "22px",
+            width: "45px",
+            height: "45px",
+            border: "1px solid rgba(255,255,255,.4)",
+            borderRadius: "12px",
+            background: "rgba(255,255,255,.15)",
+            color: "white",
+            display: "grid",
+            placeItems: "center",
+            cursor: "pointer",
+          }}
+        >
+          {menuOpen ? <X size={25} /> : <Menu size={25} />}
+        </button>
       </header>
+
+      {/* เมนูแอดมินเพียงรายการเดียว */}
+      {menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.25)",
+            zIndex: 9998,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: "80px",
+              right: "20px",
+              width: "230px",
+              background: "white",
+              borderRadius: "15px",
+              padding: "10px",
+              boxShadow: "0 8px 25px rgba(0,0,0,.15)",
+            }}
+          >
+            <Link
+              to="/admin"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "14px",
+                color: "#6D28D9",
+                fontWeight: "bold",
+                textDecoration: "none",
+              }}
+            >
+              <ShieldCheck size={22} />
+              เข้าสู่ระบบแอดมิน
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* HERO */}
       <section
